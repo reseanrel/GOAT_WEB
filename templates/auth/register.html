@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="register-container">
+    <div class="auth-card" style="max-width: 500px;">
+        <div class="auth-header">
+            <h2><i class="fas fa-paw me-2"></i>Create Account</h2>
+            <p class="mb-0">Join Pila Pet Registration</p>
+        </div>
+        <div class="auth-body">
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" class="form-control" name="full_name" placeholder="Enter your full name" required>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Age</label>
+                        <input type="number" class="form-control" name="age" placeholder="Age" min="1" max="120">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Contact Number</label>
+                        <input type="tel" class="form-control" name="contact_number" placeholder="Phone number">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Address</label>
+                    <input type="text" class="form-control" name="address" placeholder="Your complete address">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" class="form-control" name="email" placeholder="Enter your email" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password *</label>
+                    <input type="password" class="form-control" name="password" id="password" placeholder="Choose a password" required>
+                    <div id="password-strength" class="mt-2">
+                        <small class="text-muted">Password must be at least 8 characters and contain at least one symbol.</small>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirm Password *</label>
+                    <input type="password" class="form-control" name="confirm_password" placeholder="Confirm your password" required>
+                </div>
+
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <small>After registration, you'll receive a verification code via email to complete your account setup.</small>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 mb-3" id="registerBtn">
+                    <i class="fas fa-user-plus me-2"></i>Create Account
+                </button>
+            </form>
+
+            <div class="text-center">
+                <p class="mb-3">Already have an account? <a href="{{ url_for('login') }}" class="text-decoration-none">Sign in here</a></p>
+            </div>
+
+            <hr>
+
+            <div class="text-center text-muted">
+                <small><strong>Register Your Pets</strong></small>
+                <p class="mb-0"><small>Be part of our responsible pet ownership program in Pila, Laguna</small></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordInput = document.getElementById('password');
+    const passwordStrength = document.getElementById('password-strength');
+    const registerBtn = document.getElementById('registerBtn');
+
+    passwordInput.addEventListener('input', function() {
+        const password = this.value;
+        const strength = checkPasswordStrength(password);
+
+        // Update the strength indicator
+        passwordStrength.innerHTML = getStrengthHTML(strength);
+
+        // Enable/disable register button based on strength
+        if (strength.level === 'weak') {
+            registerBtn.disabled = true;
+            registerBtn.classList.add('disabled');
+        } else {
+            registerBtn.disabled = false;
+            registerBtn.classList.remove('disabled');
+        }
+    });
+
+    function checkPasswordStrength(password) {
+        let score = 0;
+        const checks = {
+            length: password.length >= 8,
+            symbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+            uppercase: /[A-Z]/.test(password),
+            lowercase: /[a-z]/.test(password),
+            number: /\d/.test(password)
+        };
+
+        // Count passed checks
+        Object.values(checks).forEach(check => {
+            if (check) score++;
+        });
+
+        let level = 'weak';
+        let message = '';
+
+        if (score >= 5) {
+            level = 'strong';
+            message = 'Strong password! Includes length, symbols, uppercase, lowercase, and numbers.';
+        } else if (score >= 4) {
+            level = 'moderate';
+            message = 'Moderate password. Consider adding more variety.';
+        } else {
+            level = 'weak';
+            message = 'Weak password. Must be at least 8 characters and contain at least one symbol.';
+        }
+
+        return { level, score, checks, message };
+    }
+
+    function getStrengthHTML(strength) {
+        const colors = {
+            weak: 'text-danger',
+            moderate: 'text-warning',
+            strong: 'text-success'
+        };
+
+        const icons = {
+            weak: 'fas fa-times-circle',
+            moderate: 'fas fa-exclamation-triangle',
+            strong: 'fas fa-check-circle'
+        };
+
+        return `<small class="${colors[strength.level]}"><i class="${icons[strength.level]} me-1"></i>${strength.message}</small>`;
+    }
+});
+</script>
+{% endblock %}

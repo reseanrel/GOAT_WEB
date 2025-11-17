@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('admin_dashboard') }}" class="nav-link active">
+                    <i class="fas fa-chart-bar me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('admin_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>All Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3>Admin Dashboard</h3>
+                        <p class="text-muted mb-0">Pila Pet Registration System</p>
+                    </div>
+                    <div class="text-end">
+                        <h6 class="mb-0">{{ session.user_name }}</h6>
+                        <span class="badge bg-danger">Administrator</span>
+                    </div>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-paw me-2"></i>Total Pets</h6>
+                            <h3 class="text-primary">{{ total_pets }}</h3>
+                            <small class="text-muted">Registered Pets</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-dog me-2"></i>Dogs</h6>
+                            <h3 class="text-success">{{ dogs }}</h3>
+                            <small class="text-muted">Registered Dogs</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-cat me-2"></i>Cats</h6>
+                            <h3 class="text-info">{{ cats }}</h3>
+                            <small class="text-muted">Registered Cats</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-exclamation-triangle me-2"></i>Lost Pets</h6>
+                            <h3 class="text-danger">{{ lost_pets_count }}</h3>
+                            <small class="text-muted">Reported Lost</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-comments me-2"></i>New Comments</h6>
+                            <h3 class="text-warning">{{ new_comments_count }}</h3>
+                            <small class="text-muted">Total Comments</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Registered Pets -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-paw me-2"></i>Recent Registered Pets</h5>
+                        <p class="text-muted mb-0">Manage and monitor all pet registrations in Pila, Laguna</p>
+                    </div>
+                    <div class="card-body">
+                        {% if pets %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Pet Name</th>
+                                            <th>Category</th>
+                                            <th>Type</th>
+                                            <th>Age</th>
+                                            <th>Owner</th>
+                                            <th>Registered On</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for pet in pets %}
+                                        <tr>
+                                            <td><strong>{{ pet.name }}</strong></td>
+                                            <td><span class="badge bg-primary">{{ pet.category }}</span></td>
+                                            <td>{{ pet.pet_type or 'N/A' }}</td>
+                                            <td>{{ pet.age }} years</td>
+                                            <td>{{ pet.owner_name }}</td>
+                                            <td>{{ pet.registered_on.strftime('%m/%d/%Y') }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-paw fa-4x text-muted mb-3"></i>
+                                <h5>No Pets Registered Yet</h5>
+                                <p class="text-muted">There are no pets registered in the system yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

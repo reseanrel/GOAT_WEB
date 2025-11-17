@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3><i class="fas fa-check-circle text-success me-2"></i>Pet Reported as Lost</h3>
+                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    </a>
+                </div>
+
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Report Submitted Successfully!</h5>
+                    <p class="mb-0">Your pet has been reported as lost and administrators have been notified via email.</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Report Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Pet Information</h6>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td><strong>Pet Name:</strong></td>
+                                        <td>{{ pet.name }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Category:</strong></td>
+                                        <td>{{ pet.category }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Type:</strong></td>
+                                        <td>{{ pet.pet_type or 'Not specified' }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Age:</strong></td>
+                                        <td>{{ pet.age }} years</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Color:</strong></td>
+                                        <td>{{ pet.color or 'Not specified' }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Report Information</h6>
+                                <table class="table table-borderless">
+                                    <tr>
+                                        <td><strong>Reported On:</strong></td>
+                                        <td>{{ datetime.now().strftime('%B %d, %Y at %I:%M %p') }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Status:</strong></td>
+                                        <td><span class="badge bg-danger">Lost</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Owner:</strong></td>
+                                        <td>{{ session.user_name }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Contact:</strong></td>
+                                        <td>{{ session.user_contact or 'Not provided' }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <h6>How the Pet Was Lost</h6>
+                            <div class="alert alert-warning">
+                                <p class="mb-0">{{ comment }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>What Happens Next?</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-envelope fa-3x text-primary mb-3"></i>
+                                <h6>1. Administrator Notification</h6>
+                                <p class="small text-muted">Administrators have been notified via email with your pet's details.</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-search fa-3x text-info mb-3"></i>
+                                <h6>2. Public Listing</h6>
+                                <p class="small text-muted">Your pet is now listed on the public lost pets page for community help.</p>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-comments fa-3x text-success mb-3"></i>
+                                <h6>3. Community Support</h6>
+                                <p class="small text-muted">Anyone can add comments or tips about sightings on the lost pets page.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-4">
+                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

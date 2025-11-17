@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link active">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3>My Pets</h3>
+                    <a href="{{ url_for('register_pet') }}" class="btn btn-success">
+                        <i class="fas fa-plus me-2"></i>Add New Pet
+                    </a>
+                </div>
+
+                <!-- Owner Information -->
+                <div class="user-info">
+                    <h5><i class="fas fa-user me-2"></i>Owner Information</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Name:</strong> {{ user_name }}</p>
+                            <p><strong>Email:</strong> {{ user_email }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            {% if user_contact %}
+                            <p><strong>Contact Number:</strong> {{ user_contact }}</p>
+                            {% endif %}
+                            {% if user_address %}
+                            <p><strong>Address:</strong> {{ user_address }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pets Section -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-paw me-2"></i>Registered Pets</h5>
+                        <p class="text-muted mb-0">Manage your pet registrations and vaccination records</p>
+                    </div>
+                    <div class="card-body">
+                        {% if pets %}
+                            <div class="row">
+                                {% for pet in pets %}
+                                <div class="col-md-6 col-lg-4">
+                                    <div class="pet-card card fade-in">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h6 class="card-title mb-0">{{ pet.name }}</h6>
+                                                <span class="badge bg-primary">{{ pet.category }}</span>
+                                            </div>
+                                            <p class="card-text">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-paw me-1"></i>{{ pet.pet_type or 'Not specified' }}<br>
+                                                    <i class="fas fa-venus-mars me-1"></i>{{ pet.gender or 'Not specified' }}<br>
+                                                    <i class="fas fa-calendar me-1"></i>{{ pet.age }} years old<br>
+                                                    <i class="fas fa-palette me-1"></i>{{ pet.color or 'Not specified' }}
+                                                </small>
+                                            </p>
+                                            <div class="btn-group w-100">
+                                                <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-sm btn-outline-primary">Details</a>
+                                                <a href="{{ url_for('vaccination_records', pet_id=pet.id) }}" class="btn btn-sm btn-outline-success">Vaccinations</a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-paw fa-4x text-muted mb-3"></i>
+                                <h5>No Pets Registered</h5>
+                                <p class="text-muted mb-4">You haven't registered any pets yet. Start by adding your first pet!</p>
+                                <a href="{{ url_for('register_pet') }}" class="btn btn-success btn-lg">
+                                    <i class="fas fa-plus me-2"></i>Register Your First Pet
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

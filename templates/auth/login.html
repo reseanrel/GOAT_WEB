@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="login-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2><i class="fas fa-paw me-2"></i>Pila Pets</h2>
+            <p class="mb-0">Municipality of Pila, Laguna</p>
+        </div>
+        <div class="auth-body">
+            <h4 class="text-center mb-4">Welcome Back</h4>
+            <p class="text-muted text-center mb-4">Sign in to manage your pet registrations</p>
+            
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-control" name="email" placeholder="Enter your email" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" name="password" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mb-3">
+                    <i class="fas fa-sign-in-alt me-2"></i>Sign In
+                </button>
+            </form>
+            
+            <div class="text-center">
+                <p class="mb-3">Don't have an account? <a href="{{ url_for('register') }}" class="text-decoration-none">Create one here</a></p>
+            </div>
+            
+            <hr>
+            
+            <div class="text-center text-muted">
+                <small><strong>Promoting Responsible Pet Ownership</strong></small>
+                <p class="mb-0"><small>Join our community of responsible pet owners in Pila, Laguna</small></p>
+            </div>
+
+            <!-- Demo Accounts -->
+            <div class="mt-4 p-3 bg-light rounded">
+                <small class="text-muted">
+                    <strong>Demo Accounts:</strong><br>
+                    Admin: admin@pila.pets / asdf<br>
+                    User: Register new account
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

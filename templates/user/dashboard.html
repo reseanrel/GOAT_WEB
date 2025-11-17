@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link active">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3>Welcome, {{ user_name.split()[0] }}!</h3>
+                    <span class="badge bg-success">Resident</span>
+                </div>
+
+                <!-- Owner Information -->
+                <div class="user-info">
+                    <h5><i class="fas fa-user me-2"></i>Owner Information</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Name:</strong> {{ user_name }}</p>
+                            <p><strong>Email:</strong> {{ user_email }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            {% if user_contact %}
+                            <p><strong>Contact Number:</strong> {{ user_contact }}</p>
+                            {% endif %}
+                            {% if user_address %}
+                            <p><strong>Address:</strong> {{ user_address }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-paw me-2"></i>Registered Pets</h6>
+                            <h3 class="text-primary">{{ user_pets|length }}</h3>
+                            <a href="{{ url_for('my_pets') }}" class="btn btn-sm btn-primary">View All</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+                            <a href="{{ url_for('register_pet') }}" class="btn btn-success w-100 mb-2">
+                                <i class="fas fa-plus me-2"></i>Register New Pet
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Pets -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Pets</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if user_pets %}
+                            <div class="row">
+                                {% for pet in user_pets[-3:]|reverse %}
+                                <div class="col-md-4">
+                                    <div class="pet-card card fade-in">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h6 class="card-title">{{ pet.name }}</h6>
+                                                <span class="badge bg-primary">{{ pet.category }}</span>
+                                            </div>
+                                            <p class="card-text">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-paw me-1"></i>{{ pet.pet_type or 'Not specified' }}<br>
+                                                    <i class="fas fa-calendar me-1"></i>{{ pet.age }} years old<br>
+                                                    <i class="fas fa-palette me-1"></i>{{ pet.color or 'Not specified' }}
+                                                </small>
+                                            </p>
+                                            <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-sm btn-primary w-100">View Details</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="text-center py-4">
+                                <i class="fas fa-paw fa-3x text-muted mb-3"></i>
+                                <h5>No Pets Registered Yet</h5>
+                                <p class="text-muted">You haven't registered any pets yet.</p>
+                                <a href="{{ url_for('register_pet') }}" class="btn btn-success">
+                                    <i class="fas fa-plus me-2"></i>Register Your First Pet
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

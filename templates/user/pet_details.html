@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3>Pet Details</h3>
+                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    </a>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <!-- Pet Information -->
+                            <div class="col-md-8">
+                                <h4 class="text-primary">{{ pet.name }}</h4>
+
+                                <div class="row mt-4">
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-info-circle me-2"></i>Pet Information</h6>
+                                        <table class="table table-borderless">
+                                            <tr>
+                                                <td><strong>Category:</strong></td>
+                                                <td>{{ pet.category }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Type:</strong></td>
+                                                <td>{{ pet.pet_type or 'Not specified' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Gender:</strong></td>
+                                                <td>{{ pet.gender or 'Not specified' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Color:</strong></td>
+                                                <td>{{ pet.color or 'Not specified' }}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6><i class="fas fa-calendar me-2"></i>Registration Details</h6>
+                                        <table class="table table-borderless">
+                                            <tr>
+                                                <td><strong>Age:</strong></td>
+                                                <td>{{ pet.age }} year(s)</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Registered On:</strong></td>
+                                                <td>{{ pet.registered_on.strftime('%m/%d/%Y') }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Status:</strong></td>
+                                                <td>
+                                                    {% if pet.lost %}
+                                                    <span class="badge bg-danger">Lost</span>
+                                                    {% else %}
+                                                    <span class="badge bg-success">Safe</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Owner Information -->
+                                <div class="mt-4">
+                                    <h6><i class="fas fa-user me-2"></i>Owner Information</h6>
+                                    <div class="user-info">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Name:</strong> {{ owner.full_name }}</p>
+                                                <p><strong>Email:</strong> {{ owner.email }}</p>
+                                            </div>
+                                            <div class="col-md-6">
+                                                {% if owner.contact_number %}
+                                                <p><strong>Contact Number:</strong> {{ owner.contact_number }}</p>
+                                                {% endif %}
+                                                {% if owner.address %}
+                                                <p><strong>Address:</strong> {{ owner.address }}</p>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Quick Actions -->
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="d-grid gap-2">
+                                            <a href="{{ url_for('vaccination_records', pet_id=pet.id) }}" class="btn btn-outline-primary">
+                                                <i class="fas fa-syringe me-2"></i>Vaccination Records
+                                            </a>
+                                            {% if not pet.lost %}
+                                            <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reportLostModal" data-pet-id="{{ pet.id }}">
+                                                <i class="fas fa-exclamation-triangle me-2"></i>Report Lost
+                                            </button>
+                                            {% else %}
+                                            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#markFoundModal" data-pet-id="{{ pet.id }}">
+                                                <i class="fas fa-check-circle me-2"></i>Mark as Found
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Lost Modal -->
+<div class="modal fade" id="reportLostModal" tabindex="-1" aria-labelledby="reportLostModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reportLostModalLabel">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Report Pet as Lost
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Please provide details about how your pet was lost. This information will be sent to the administrators to help with the search.</p>
+                <form id="reportLostForm">
+                    <div class="mb-3">
+                        <label for="lostComment" class="form-label">How was your pet lost? <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="lostComment" rows="4" placeholder="Describe the circumstances of how your pet went missing (e.g., escaped from backyard, lost during walk, etc.)" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="submitReportLost()">
+                    <i class="fas fa-exclamation-triangle me-2"></i>Report as Lost
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mark Found Modal -->
+<div class="modal fade" id="markFoundModal" tabindex="-1" aria-labelledby="markFoundModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="markFoundModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>Mark Pet as Found
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Great news! Please provide details about how your pet was found. This will help update the records and notify administrators.</p>
+                <form id="markFoundForm">
+                    <div class="mb-3">
+                        <label for="foundComment" class="form-label">How was your pet found? <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="foundComment" rows="4" placeholder="Describe how your pet was found (e.g., returned by neighbor, found at shelter, etc.)" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="submitMarkFound()">
+                    <i class="fas fa-check-circle me-2"></i>Mark as Found
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Global variables and functions for Report Lost functionality
+let currentPetId = null;
+
+// Initialize modal event listeners when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+
+    const reportLostModal = document.getElementById('reportLostModal');
+    const markFoundModal = document.getElementById('markFoundModal');
+
+    if (reportLostModal) {
+        reportLostModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const petId = button.getAttribute('data-pet-id');
+            console.log('Modal opening for petId:', petId);
+            currentPetId = parseInt(petId);
+            document.getElementById('lostComment').value = '';
+        });
+    }
+
+    if (markFoundModal) {
+        markFoundModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const petId = button.getAttribute('data-pet-id');
+            console.log('Mark found modal opening for petId:', petId);
+            currentPetId = parseInt(petId);
+            document.getElementById('foundComment').value = '';
+        });
+    }
+});
+
+function submitReportLost() {
+    console.log('submitReportLost called with currentPetId:', currentPetId);
+    const comment = document.getElementById('lostComment').value.trim();
+    if (!comment) {
+        alert('Please provide details about how your pet was lost.');
+        return;
+    }
+
+    // Show loading state
+    const submitBtn = document.querySelector('#reportLostModal .btn-warning');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Reporting...';
+
+    fetch(`/user/report-lost-pet/${currentPetId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ comment: comment })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pet reported as lost successfully! Administrators have been notified.');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('reportLostModal'));
+            modal.hide();
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while reporting the pet as lost.');
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+
+function submitMarkFound() {
+    console.log('submitMarkFound called with currentPetId:', currentPetId);
+    const comment = document.getElementById('foundComment').value.trim();
+    if (!comment) {
+        alert('Please provide details about how your pet was found.');
+        return;
+    }
+
+    // Show loading state
+    const submitBtn = document.querySelector('#markFoundModal .btn-success');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Marking...';
+
+    fetch(`/user/mark-found-pet/${currentPetId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ comment: comment })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Pet marked as found successfully! Administrators have been notified.');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('markFoundModal'));
+            modal.hide();
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while marking the pet as found.');
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+</script>
+{% endblock %}

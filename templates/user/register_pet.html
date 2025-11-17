@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-3 sidebar">
+            <div class="sidebar-header">
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3>Register New Pet</h3>
+                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    </a>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Add your pet's information to the registration system.</h5>
+                        <hr>
+                        
+                        <form method="POST">
+                            <!-- Pet Photo Section -->
+                            <div class="mb-4">
+                                <h6><i class="fas fa-camera me-2"></i>Pet Photo (Optional)</h6>
+                                <div class="border rounded p-4 text-center" style="background: #f8f9fa; cursor: pointer;">
+                                    <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                    <p class="mb-0 text-muted">Click to upload pet photo</p>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <!-- Basic Information -->
+                            <h6 class="mb-3"><i class="fas fa-info-circle me-2"></i>Basic Information</h6>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Pet Name *</label>
+                                    <input type="text" class="form-control" name="pet_name" placeholder="Enter pet name" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Pet Category *</label>
+                                    <select class="form-select" name="pet_category" required>
+                                        <option value="">Select Category</option>
+                                        <option value="Dog">Dog</option>
+                                        <option value="Cat">Cat</option>
+                                        <option value="Bird">Bird</option>
+                                        <option value="Rabbit">Rabbit</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Specify Pet Type/Breed</label>
+                                    <input type="text" class="form-control" name="pet_type" placeholder="e.g., Aspin, Persian, etc">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Age (years)</label>
+                                    <input type="number" class="form-control" name="age" placeholder="Age in years" min="0" max="50">
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Color</label>
+                                    <input type="text" class="form-control" name="color" placeholder="e.g., Black, White, Brown">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Gender</label>
+                                    <select class="form-select" name="gender">
+                                        <option value="">Select Gender</option>
+                                        <option value="Male">Male</option>
+                                        <option value="Female">Female</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <!-- Owner Information -->
+                            <h6 class="mb-3"><i class="fas fa-user me-2"></i>Owner Information</h6>
+                            <div class="user-info">
+                                <p><strong>Name:</strong> {{ session.user_name }}</p>
+                                <p><strong>Email:</strong> {{ session.user_email }}</p>
+                                {% if session.user_address %}
+                                <p><strong>Address:</strong> {{ session.user_address }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-4">
+                                <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-times me-2"></i>Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paw me-2"></i>Register Pet
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
