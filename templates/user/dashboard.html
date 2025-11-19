@@ -9,7 +9,7 @@
 
     <div class="row g-0">
         <!-- Sidebar -->
-        <div class="col-md-3 sidebar" id="sidebar">
+        <div class="col-md-2 sidebar" id="sidebar">
             <div class="sidebar-header">
                 <button class="close-sidebar d-md-none" id="closeSidebar">
                     <i class="fas fa-times"></i>
@@ -31,15 +31,15 @@
         </div>
 
         <!-- Main Content -->
-        <div class="col-md-9 main-content-wrapper">
-            <div class="main-content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content" style="padding: 0;">
+                <div class="d-flex justify-content-between align-items-center mb-4" style="padding: 2rem 2rem 0 2rem;">
                     <h3>Welcome, {{ user_name.split()[0] }}!</h3>
                     <span class="badge bg-success">Resident</span>
                 </div>
 
                 <!-- Owner Information -->
-                <div class="user-info">
+                <div class="user-info" style="padding: 0 2rem;">
                     <h5><i class="fas fa-user me-2"></i>Owner Information</h5>
                     <div class="row">
                         <div class="col-md-6">
@@ -58,7 +58,7 @@
                 </div>
 
                 <!-- Quick Actions -->
-                <div class="row mb-4">
+                <div class="row mb-4" style="padding: 0 2rem;">
                     <div class="col-md-6">
                         <div class="stats-card">
                             <h6><i class="fas fa-paw me-2"></i>Registered Pets</h6>
@@ -77,7 +77,7 @@
                 </div>
 
                 <!-- Recent Pets -->
-                <div class="card">
+                <div class="card" style="margin: 0 2rem 2rem 2rem;">
                     <div class="card-header">
                         <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Pets</h5>
                     </div>
@@ -150,4 +150,5 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
 {% endblock %}

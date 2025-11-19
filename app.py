@@ -122,76 +122,6 @@ def send_verification_email(user_email, verification_code):
         print(f"❌ Error sending email to {user_email}: {str(e)}")
         return False
 
-admin = []
-users = []
-pets = []
-vaccinations = []
-next_pet_id = 1
-next_user_id = 1
-next_vaccination_id = 1
-
-#demo acc lang
-default_admin = {
-    'id': next_user_id,
-    'full_name': 'Sir John Mark P',
-    'email': 'admin@pila.pets',
-    'password': 'asdf',
-    'is_admin': True,
-    'contact_number': '09123456789',
-    'address': 'Pila, Laguna',
-    'age': 35,
-    'created_at': datetime.now()
-}
-admin.append(default_admin)
-next_user_id += 1
-
-
-sample_users = [
-    {
-        'id': next_user_id,
-        'full_name': 'Frandie wewets',
-        'email': 'frandiekaivin@gmail.com',
-        'password': 'asdf',
-        'is_admin': False,
-        'contact_number': '09123456780',
-        'address': 'jan lang',
-        'age': 28,
-        'created_at': datetime.now()
-    }
-]
-users.extend(sample_users)
-next_user_id += 1
-
-
-sample_pets = [
-    {
-        'id': next_pet_id,
-        'name': 'Buddy',
-        'category': 'Dog',
-        'pet_type': 'Aspin',
-        'age': 3,
-        'color': 'Brown',
-        'gender': 'Male',
-        'owner_id': 2,  # Frandie Kaivin Colderia
-        'registered_on': datetime.now(),
-        'photo_url': None
-    },
-    {
-        'id': next_pet_id + 1,
-        'name': 'Mimi',
-        'category': 'Cat',
-        'pet_type': 'Persian',
-        'age': 2,
-        'color': 'White',
-        'gender': 'Female',
-        'owner_id': 2,  # Frandie Kaivin Colderia
-        'registered_on': datetime.now(),
-        'photo_url': None
-    }
-]
-pets.extend(sample_pets)
-next_pet_id += 2
-
 # Authentication Routes
 @app.route('/')
 def index():
@@ -454,20 +384,7 @@ def register_pet():
         if not name or not category:
             flash('Pet name and category are required', 'error')
             return render_template('user/register_pet.html')
-        
-        global next_pet_id
-        new_pet = {
-            'id': next_pet_id,
-            'name': name,
-            'category': category,
-            'pet_type': pet_type,
-            'age': int(age) if age and age.isdigit() else None,
-            'color': color,
-            'gender': gender,
-            'owner_id': session['user_id'],
-            'registered_on': datetime.now(),
-            'photo_url': None
-        }
+
         cursor.execute("""
             INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -508,13 +425,16 @@ def vaccination_records(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
-    pet = next((p for p in pets if p['id'] == pet_id), None)
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+    pet = cursor.fetchone()
 
-    if not pet or pet['owner_id'] != session['user_id']:
+    if not pet:
         flash('Access denied', 'error')
         return redirect(url_for('my_pets'))
 
-    pet_vaccinations = [v for v in vaccinations if v['pet_id'] == pet_id]
+    # Get vaccinations from database
+    cursor.execute("SELECT * FROM vaccinations WHERE pet_id = %s ORDER BY date_administered DESC", (pet_id,))
+    pet_vaccinations = cursor.fetchall()
 
     return render_template('user/vaccination.html', pet=pet, vaccinations=pet_vaccinations)
 
@@ -934,33 +854,28 @@ def add_comment(pet_id):
 def add_vaccination(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
-    
-    pet = next((p for p in pets if p['id'] == pet_id), None)
-    if not pet or pet['owner_id'] != session['user_id']:
+
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+    pet = cursor.fetchone()
+
+    if not pet:
         return jsonify({'success': False, 'message': 'Access denied'})
-    
+
     vaccine_name = request.form.get('vaccine_name')
     date_administered = request.form.get('date_administered')
     next_due_date = request.form.get('next_due_date')
     administered_by = request.form.get('administered_by')
     notes = request.form.get('notes')
-    
+
     if not vaccine_name or not date_administered:
         return jsonify({'success': False, 'message': 'Vaccine name and date are required'})
-    
-    global next_vaccination_id
-    new_vaccination = {
-        'id': next_vaccination_id,
-        'vaccine_name': vaccine_name,
-        'date_administered': datetime.strptime(date_administered, '%Y-%m-%d'),
-        'next_due_date': datetime.strptime(next_due_date, '%Y-%m-%d') if next_due_date else None,
-        'administered_by': administered_by,
-        'notes': notes,
-        'pet_id': pet_id
-    }
-    vaccinations.append(new_vaccination)
-    next_vaccination_id += 1
-    
+
+    cursor.execute("""
+        INSERT INTO vaccinations (vaccine_name, date_administered, next_due_date, administered_by, notes, pet_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by, notes, pet_id))
+    db.commit()
+
     return jsonify({'success': True, 'message': 'Vaccination record added successfully'})
 
 # Admin Routes
@@ -1020,4 +935,4 @@ def admin_pets():
     return render_template('admin/pets.html', pets=pets_with_owners)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port = 5000, debug=True)
