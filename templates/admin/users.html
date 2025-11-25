@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('admin_dashboard') }}" class="nav-link">
+                    <i class="fas fa-chart-bar me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('admin_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>All Pets
+                </a>
+                <a href="{{ url_for('admin_users') }}" class="nav-link active">
+                    <i class="fas fa-users me-2"></i>Users
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3>All Registered Users</h3>
+                        <p class="text-muted mb-0">Manage all user accounts in the system</p>
+                    </div>
+                    <div class="text-end">
+                        <h6 class="mb-0">{{ session.user_name }}</h6>
+                        <span class="badge bg-danger">Administrator</span>
+                    </div>
+                </div>
+
+                <!-- Search/Filter Controls -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <h6 class="mb-0"><i class="fas fa-search me-2"></i>Search Users</h6>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex gap-2 justify-content-end">
+                                    <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Search by name or email..." style="width: auto; min-width: 250px;">
+                                    <select class="form-select form-select-sm" id="statusFilter" style="width: auto;">
+                                        <option value="all">All Users</option>
+                                        <option value="active">Active Users</option>
+                                        <option value="inactive">Inactive Users</option>
+                                        <option value="admin">Admin Users</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        {% if users %}
+                            <div class="table-responsive">
+                                <table class="table table-striped" id="usersTable">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Age</th>
+                                            <th>Contact</th>
+                                            <th>Address</th>
+                                            <th>Pets</th>
+                                            <th>Status</th>
+                                            <th>Registered</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for user in users %}
+                                        <tr class="user-row" data-status="{% if user.is_admin %}admin{% elif user.active %}active{% else %}inactive{% endif %}">
+                                            <td>{{ user.id }}</td>
+                                            <td>
+                                                <strong>{{ user.full_name }}</strong>
+                                                {% if user.is_admin %}
+                                                <i class="fas fa-crown text-warning ms-1" title="Administrator"></i>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ user.email }}</td>
+                                            <td>{{ user.age or 'N/A' }}</td>
+                                            <td>{{ user.contact_number or 'N/A' }}</td>
+                                            <td>{{ user.address or 'N/A' }}</td>
+                                            <td>
+                                                <span class="badge bg-info">{{ user.pet_count }}</span>
+                                            </td>
+                                            <td>
+                                                {% if user.is_admin %}
+                                                <span class="badge bg-warning">
+                                                    <i class="fas fa-crown me-1"></i>Admin
+                                                </span>
+                                                {% elif user.active %}
+                                                <span class="badge bg-success">
+                                                    <i class="fas fa-check me-1"></i>Active
+                                                </span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">
+                                                    <i class="fas fa-ban me-1"></i>Inactive
+                                                </span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ user.created_at.strftime('%m/%d/%Y') if user.created_at else 'N/A' }}</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary" title="Edit User">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+                                                    {% if not user.is_admin %}
+                                                    <button class="btn btn-sm btn-outline-warning toggle-status-btn" data-user-id="{{ user.id }}" data-current-status="{{ user.active }}" title="{% if user.active %}Deactivate User{% else %}Reactivate User{% endif %}">
+                                                        <i class="fas fa-{% if user.active %}ban{% else %}check{% endif %}"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-danger delete-user-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.full_name }}" title="Delete User">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-users fa-4x text-muted mb-3"></i>
+                                <h5>No Users Found</h5>
+                                <p class="text-muted">There are no users registered in the system yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteUserModalLabel">Confirm User Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete user "<strong id="deleteUserName"></strong>"?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This action cannot be undone. All pets, comments, and vaccination records associated with this user will also be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete User</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const userRows = document.querySelectorAll('.user-row');
+
+    function filterUsers() {
+        const searchValue = searchInput.value.toLowerCase();
+        const statusValue = statusFilter.value;
+
+        userRows.forEach(row => {
+            const name = row.cells[1].textContent.toLowerCase();
+            const email = row.cells[2].textContent.toLowerCase();
+            const status = row.getAttribute('data-status');
+
+            const searchMatch = name.includes(searchValue) || email.includes(searchValue);
+            const statusMatch = statusValue === 'all' || status === statusValue;
+
+            if (searchMatch && statusMatch) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    searchInput.addEventListener('input', filterUsers);
+    statusFilter.addEventListener('change', filterUsers);
+
+    // Toggle user status
+    document.querySelectorAll('.toggle-status-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const userId = this.getAttribute('data-user-id');
+            const currentStatus = this.getAttribute('data-current-status') === 'True';
+            const action = currentStatus ? 'deactivate' : 'reactivate';
+            const actionText = currentStatus ? 'deactivate' : 'reactivate';
+
+            if (confirm(`Are you sure you want to ${actionText} this user?`)) {
+                fetch(`/admin/${action}-user/${userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while updating user status');
+                });
+            }
+        });
+    });
+
+    // Delete user functionality
+    let userToDelete = null;
+    document.querySelectorAll('.delete-user-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            userToDelete = this.getAttribute('data-user-id');
+            const userName = this.getAttribute('data-user-name');
+            document.getElementById('deleteUserName').textContent = userName;
+            const modal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+            modal.show();
+        });
+    });
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+        if (userToDelete) {
+            fetch(`/admin/delete-user/${userToDelete}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the user');
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

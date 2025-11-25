@@ -155,6 +155,11 @@ body {
     transition: transform 0.3s;
     margin-bottom: 1.5rem;
     background: white;
+
+    /* Flex layout for equal height cards */
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .pet-card:hover {

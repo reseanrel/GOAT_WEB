@@ -7,6 +7,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,6 +36,18 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.getenv('GMAIL_USERNAME', 'resedelrio9@gmail.com')
 app.config['MAIL_PASSWORD'] = os.getenv('GMAIL_APP_PASSWORD', 'dswqlieetyuezanb')
 app.config['COMPANY_NAME'] = 'Pila Pet Registration'
+
+# File upload configuration
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# Create uploads directory if it doesn't exist
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def send_verification_email(user_email, verification_code):
     """Send verification email FROM Gmail TO user's email"""
@@ -174,7 +187,8 @@ def login():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        full_name = request.form.get('full_name')
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
         age = request.form.get('age')
         contact_number = request.form.get('contact_number')
         address = request.form.get('address')
@@ -182,7 +196,7 @@ def register():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
-        if not all([full_name, email, password, confirm_password]):
+        if not all([first_name, last_name, email, password, confirm_password]):
             flash('Please fill all required fields', 'error')
             return render_template('auth/register.html')
 
@@ -199,6 +213,11 @@ def register():
             flash('Password must contain at least one symbol', 'error')
             return render_template('auth/register.html')
 
+        # Contact number validation
+        if contact_number and (not contact_number.isdigit() or len(contact_number) != 11):
+            flash('Contact number must be exactly 11 digits and contain only numbers', 'error')
+            return render_template('auth/register.html')
+
         try:
             # ✅ Check for duplicate email in the database
             cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
@@ -210,8 +229,13 @@ def register():
             # Generate verification code
             verification_code = ''.join(random.choices(string.digits, k=6))
 
+            # Combine first and last name for full name
+            full_name = f"{first_name} {last_name}"
+
             # Store registration data temporarily in session
             session['pending_registration'] = {
+                'first_name': first_name,
+                'last_name': last_name,
                 'full_name': full_name,
                 'age': age,
                 'contact_number': contact_number,
@@ -314,6 +338,10 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            # Check if this is an AJAX request
+            if (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+                request.headers.get('Content-Type') in ['application/json', 'multipart/form-data']):
+                return jsonify({'success': False, 'message': 'Please login to access this page'})
             flash('Please login to access this page', 'error')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -372,7 +400,7 @@ def my_pets():
 def register_pet():
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
-    
+
     if request.method == 'POST':
         name = request.form.get('pet_name')
         category = request.form.get('pet_category')
@@ -380,20 +408,35 @@ def register_pet():
         age = request.form.get('age')
         color = request.form.get('color')
         gender = request.form.get('gender')
-        
+        for_adoption = request.form.get('for_adoption') == 'on'
+
         if not name or not category:
             flash('Pet name and category are required', 'error')
             return render_template('user/register_pet.html')
 
+        # Handle file upload
+        photo_filename = None
+        if 'pet_photo' in request.files:
+            file = request.files['pet_photo']
+            if file and file.filename != '' and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                # Add timestamp to make filename unique
+                import time
+                timestamp = str(int(time.time()))
+                name_part, ext = os.path.splitext(filename)
+                photo_filename = f"{name_part}_{timestamp}{ext}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
+                file.save(file_path)
+
         cursor.execute("""
-            INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (name, category, pet_type, age, color, gender, session['user_id']))
+            INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, for_adoption)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, for_adoption))
         db.commit()
-        
+
         flash(f'Pet "{name}" registered successfully!', 'success')
         return redirect(url_for('my_pets'))
-    
+
     return render_template('user/register_pet.html')
 
 @app.route('/user/pet/<int:pet_id>')
@@ -401,14 +444,14 @@ def register_pet():
 def pet_details(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
-    
+
     cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
     pet = cursor.fetchone()
-    
+
     if not pet or pet['owner_id'] != session['user_id']:
         flash('Access denied', 'error')
         return redirect(url_for('my_pets'))
-    
+
     # Get owner info from session
     owner_info = {
         'full_name': session['user_name'],
@@ -416,8 +459,79 @@ def pet_details(pet_id):
         'contact_number': session['user_contact'],
         'address': session['user_address']
     }
-    
+
     return render_template('user/pet_details.html', pet=pet, owner=owner_info)
+
+@app.route('/user/update-pet-photo/<int:pet_id>', methods=['POST'])
+@login_required
+def update_pet_photo(pet_id):
+    if session.get('is_admin'):
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    try:
+        print(f"🔍 Checking pet ownership for pet_id: {pet_id}, user_id: {session['user_id']}")
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
+
+        if not pet:
+            print(f"❌ Pet not found or access denied for pet_id: {pet_id}")
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+
+        print(f"✅ Pet found: {pet['name']}")
+
+        # Handle file upload
+        if 'pet_photo' not in request.files:
+            print("❌ No file part in request")
+            return jsonify({'success': False, 'message': 'No file provided'})
+
+        file = request.files['pet_photo']
+        print(f"📁 File received: {file.filename if file else 'None'}")
+
+        if not file or file.filename == '':
+            print("❌ No file selected")
+            return jsonify({'success': False, 'message': 'No file selected'})
+
+        if not allowed_file(file.filename):
+            print(f"❌ Invalid file type: {file.filename}")
+            return jsonify({'success': False, 'message': 'Invalid file type. Please upload PNG, JPG, JPEG, or GIF files.'})
+
+        # Generate unique filename
+        filename = secure_filename(file.filename)
+        import time
+        timestamp = str(int(time.time()))
+        name_part, ext = os.path.splitext(filename)
+        photo_filename = f"{name_part}_{timestamp}{ext}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
+
+        print(f"💾 Saving file to: {file_path}")
+
+        # Ensure upload directory exists
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+        # Save the file
+        file.save(file_path)
+
+        # Verify file was saved
+        if not os.path.exists(file_path):
+            print(f"❌ File was not saved: {file_path}")
+            return jsonify({'success': False, 'message': 'Failed to save file'})
+
+        print(f"✅ File saved successfully: {photo_filename}")
+
+        # Update pet photo in database
+        print(f"🗄️ Updating database for pet_id: {pet_id}")
+        cursor.execute("UPDATE pets SET photo_url = %s WHERE id = %s", (photo_filename, pet_id))
+        db.commit()
+
+        print(f"✅ Photo uploaded successfully: {photo_filename}")
+        return jsonify({'success': True, 'message': 'Photo uploaded successfully', 'photo_filename': photo_filename})
+
+    except Exception as e:
+        print(f"❌ Error uploading photo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        return jsonify({'success': False, 'message': 'An error occurred while uploading the photo. Please try again.'})
 
 @app.route('/user/pet/<int:pet_id>/vaccinations')
 @login_required
@@ -747,7 +861,171 @@ def lost_pets():
 
     return render_template('lost_pets.html', lost_pets=lost_pets_list)
 
+@app.route('/adoption')
+@login_required
+def adoption():
+    if session.get('is_admin'):
+        return redirect(url_for('admin_dashboard'))
+
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+               users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.for_adoption = TRUE AND pets.lost = FALSE
+        ORDER BY pets.registered_on DESC
+    """)
+    adoption_pets = cursor.fetchall()
+
+    return render_template('user/adoption.html', adoption_pets=adoption_pets)
+
+@app.route('/express-adoption-interest/<int:pet_id>', methods=['POST'])
+@login_required
+def express_adoption_interest(pet_id):
+    if session.get('is_admin'):
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    # Check if pet is available for adoption
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND for_adoption = TRUE AND lost = FALSE", (pet_id,))
+    pet = cursor.fetchone()
+
+    if not pet:
+        return jsonify({'success': False, 'message': 'Pet not available for adoption'})
+
+    message = request.form.get('message', '').strip()
+    contact = request.form.get('contact', '').strip()
+
+    if not message:
+        return jsonify({'success': False, 'message': 'Please provide a message'})
+
+    # Get adopter info
+    adopter_name = session['user_name']
+    adopter_email = session['user_email']
+    adopter_contact = session.get('user_contact', '')
+
+    # Get pet owner info
+    cursor.execute("SELECT full_name, email FROM users WHERE id = %s", (pet['owner_id'],))
+    owner = cursor.fetchone()
+
+    if not owner:
+        return jsonify({'success': False, 'message': 'Owner information not found'})
+
+    # Insert adoption interest as comment
+    full_message = f"ADOPTION INTEREST from {adopter_name}:\n{message}"
+    if contact:
+        full_message += f"\n\nAdditional contact: {contact}"
+    full_message += f"\n\nAdopter Email: {adopter_email}"
+    if adopter_contact:
+        full_message += f"\nAdopter Phone: {adopter_contact}"
+
+    cursor.execute("""
+        INSERT INTO comments (pet_id, user_id, comment)
+        VALUES (%s, %s, %s)
+    """, (pet_id, session['user_id'], full_message))
+    db.commit()
+
+    # Send email notification to pet owner
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Adoption Interest for Your Pet: {pet['name']}"
+        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
+        msg['To'] = owner['email']
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                .pet-info {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
+                .interest-box {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
+                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>{app.config['COMPANY_NAME']} - Adoption Interest</h1>
+            </div>
+            <div class="content">
+                <p>Hello {owner['full_name']},</p>
+                <p>Someone has expressed interest in adopting your pet!</p>
+
+                <div class="pet-info">
+                    <h4>Pet Information</h4>
+                    <p><strong>Pet Name:</strong> {pet['name']}</p>
+                    <p><strong>Category:</strong> {pet['category']}</p>
+                    <p><strong>Type:</strong> {pet['pet_type'] or 'Not specified'}</p>
+                    <p><strong>Age:</strong> {pet['age']} year(s)</p>
+                </div>
+
+                <div class="interest-box">
+                    <h4>Adoption Interest Details</h4>
+                    <p><strong>Interested Person:</strong> {adopter_name}</p>
+                    <p><strong>Email:</strong> {adopter_email}</p>
+                    {("<p><strong>Phone:</strong> " + adopter_contact + "</p>") if adopter_contact else ""}
+                    {("<p><strong>Additional Contact:</strong> " + contact + "</p>") if contact else ""}
+                    <p><strong>Message:</strong></p>
+                    <p style="background: #f8f9fa; padding: 15px; border-radius: 3px;">{message}</p>
+                </div>
+
+                <p>Please review this adoption interest and contact the interested person if you'd like to proceed with the adoption process.</p>
+                <p>You can also respond through the admin dashboard or contact our team for assistance.</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated notification from {app.config['COMPANY_NAME']}.</p>
+                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        {app.config['COMPANY_NAME']} - Adoption Interest
+
+        Hello {owner['full_name']},
+
+        Someone has expressed interest in adopting your pet {pet['name']}!
+
+        Pet Information:
+        - Name: {pet['name']}
+        - Category: {pet['category']}
+        - Type: {pet['pet_type'] or 'Not specified'}
+        - Age: {pet['age']} year(s)
+
+        Adoption Interest Details:
+        - Interested Person: {adopter_name}
+        - Email: {adopter_email}
+        {("- Phone: " + adopter_contact) if adopter_contact else ""}
+        {("- Additional Contact: " + contact) if contact else ""}
+        - Message: {message}
+
+        Please review this adoption interest and contact the interested person if you'd like to proceed.
+
+        This is an automated notification from {app.config['COMPANY_NAME']}.
+        """
+
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+        server.starttls()
+        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        server.send_message(msg)
+        server.quit()
+
+        print(f"✅ Adoption interest notification sent to {owner['email']} for pet {pet['name']}")
+
+    except Exception as e:
+        print(f"❌ Error sending adoption interest email: {str(e)}")
+
+    return jsonify({'success': True, 'message': 'Interest submitted successfully'})
+
 @app.route('/lost-pet/<int:pet_id>/add-comment', methods=['POST'])
+@login_required
 def add_comment(pet_id):
     # Check if pet exists and is lost
     cursor.execute("SELECT * FROM pets WHERE id = %s AND lost = TRUE", (pet_id,))
@@ -886,19 +1164,11 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) AS total FROM pets")
     total_pets = cursor.fetchone()['total']
 
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE category = 'Dog'")
-    dogs = cursor.fetchone()['total']
-
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE category = 'Cat'")
-    cats = cursor.fetchone()['total']
-
     cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE lost = TRUE")
     lost_pets_count = cursor.fetchone()['total']
 
     cursor.execute("SELECT COUNT(*) AS total FROM comments")
     new_comments_count = cursor.fetchone()['total']
-
-    other_pets = total_pets - dogs - cats
 
     # Get recent pets with owner information
     cursor.execute("""
@@ -912,11 +1182,8 @@ def admin_dashboard():
 
     return render_template('admin/dashboard.html',
                          total_pets=total_pets,
-                         dogs=dogs,
-                         cats=cats,
                          lost_pets_count=lost_pets_count,
                          new_comments_count=new_comments_count,
-                         other_pets=other_pets,
                          pets=recent_pets_with_owners)
 
 @app.route('/admin/pets')
@@ -931,8 +1198,644 @@ def admin_pets():
         JOIN users ON pets.owner_id = users.id
     """)
     pets_with_owners = cursor.fetchall()
-    
+
     return render_template('admin/pets.html', pets=pets_with_owners)
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    # Get all users with pet count
+    cursor.execute("""
+        SELECT users.*, COUNT(pets.id) AS pet_count
+        FROM users
+        LEFT JOIN pets ON users.id = pets.owner_id
+        GROUP BY users.id
+        ORDER BY users.id
+    """)
+    users_with_pet_count = cursor.fetchall()
+
+    return render_template('admin/users.html', users=users_with_pet_count)
+
+@app.route('/admin/edit-user/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def edit_user(user_id):
+    if request.method == 'POST':
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        age = request.form.get('age')
+        contact_number = request.form.get('contact_number')
+        address = request.form.get('address')
+        email = request.form.get('email')
+
+        if not all([first_name, last_name, email]):
+            flash('First name, last name, and email are required', 'error')
+            return redirect(url_for('edit_user', user_id=user_id))
+
+        full_name = f"{first_name} {last_name}"
+
+        # Check if email is already taken by another user
+        cursor.execute("SELECT id FROM users WHERE email = %s AND id != %s", (email, user_id))
+        existing_user = cursor.fetchone()
+        if existing_user:
+            flash('Email already in use by another user', 'error')
+            return redirect(url_for('edit_user', user_id=user_id))
+
+        # Update user
+        cursor.execute("""
+            UPDATE users
+            SET full_name = %s, age = %s, contact_number = %s, address = %s, email = %s
+            WHERE id = %s
+        """, (full_name, age, contact_number, address, email, user_id))
+        db.commit()
+
+        flash(f'User "{full_name}" updated successfully', 'success')
+        return redirect(url_for('admin_users'))
+
+    # Get user data
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        flash('User not found', 'error')
+        return redirect(url_for('admin_users'))
+
+    # Split full name for form
+    name_parts = user['full_name'].split(' ', 1)
+    user['first_name'] = name_parts[0]
+    user['last_name'] = name_parts[1] if len(name_parts) > 1 else ''
+
+    return render_template('admin/edit_user.html', user=user)
+
+@app.route('/admin/deactivate-user/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def deactivate_user(user_id):
+    # Get user data
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'})
+
+    if user['is_admin']:
+        return jsonify({'success': False, 'message': 'Cannot deactivate admin user'})
+
+    # Toggle active status
+    new_status = not user['active']
+    cursor.execute("UPDATE users SET active = %s WHERE id = %s", (new_status, user_id))
+    db.commit()
+
+    action = 'deactivated' if not new_status else 'reactivated'
+
+    # Send email notification
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Account {action.title()} - {app.config['COMPANY_NAME']}"
+        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
+        msg['To'] = user['email']
+
+        header_color = '#FF6B35' if not new_status else '#4CAF50'
+        status_message = "You will no longer be able to log in or access your account until it is reactivated." if not new_status else "You can now log in and access your account again."
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: {header_color}; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>{app.config['COMPANY_NAME']} - Account {action.title()}</h1>
+            </div>
+            <div class="content">
+                <p>Hello {user['full_name']},</p>
+                <p>Your account has been {action} by an administrator.</p>
+                <p>{status_message}</p>
+                <p>If you have any questions, please contact support.</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated message. Please do not reply to this email.</p>
+                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        {app.config['COMPANY_NAME']} - Account {action.title()}
+
+        Hello {user['full_name']},
+
+        Your account has been {action} by an administrator.
+
+        {'You will no longer be able to log in or access your account until it is reactivated.' if not new_status else 'You can now log in and access your account again.'}
+
+        If you have any questions, please contact support.
+
+        This is an automated message. Please do not reply to this email.
+        """
+
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+        server.starttls()
+        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        server.send_message(msg)
+        server.quit()
+
+        print(f"✅ Account {action} notification sent to {user['email']}")
+
+    except Exception as e:
+        print(f"❌ Error sending notification email: {str(e)}")
+
+    flash(f'User "{user["full_name"]}" {action} successfully', 'success')
+    return jsonify({'success': True, 'message': f'User {action} successfully'})
+
+@app.route('/admin/edit-pet/<int:pet_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def edit_pet(pet_id):
+    # Get pet data with owner information
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+               users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.id = %s
+    """, (pet_id,))
+    pet = cursor.fetchone()
+
+    if not pet:
+        flash('Pet not found', 'error')
+        return redirect(url_for('admin_pets'))
+
+    if request.method == 'POST':
+        pet_name = request.form.get('pet_name')
+        pet_category = request.form.get('pet_category')
+        pet_type = request.form.get('pet_type')
+        age = request.form.get('age')
+        color = request.form.get('color')
+        gender = request.form.get('gender')
+        lost_status = request.form.get('lost_status') == 'on'
+
+        if not pet_name or not pet_category:
+            flash('Pet name and category are required', 'error')
+            return redirect(url_for('edit_pet', pet_id=pet_id))
+
+        # Handle file upload
+        photo_filename = pet['photo_url']  # Keep existing if no new upload
+        if 'pet_photo' in request.files:
+            file = request.files['pet_photo']
+            if file and file.filename != '' and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                import time
+                timestamp = str(int(time.time()))
+                name_part, ext = os.path.splitext(filename)
+                photo_filename = f"{name_part}_{timestamp}{ext}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
+                file.save(file_path)
+
+        # Update pet
+        cursor.execute("""
+            UPDATE pets
+            SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, lost = %s, photo_url = %s
+            WHERE id = %s
+        """, (pet_name, pet_category, pet_type, age, color, gender, lost_status, photo_filename, pet_id))
+        db.commit()
+
+        flash(f'Pet "{pet_name}" updated successfully', 'success')
+        return redirect(url_for('admin_pets'))
+
+    # Get owner info for template
+    owner = {
+        'full_name': pet['owner_name'],
+        'email': pet['owner_email'],
+        'contact_number': pet['owner_contact'],
+        'address': pet['owner_address']
+    }
+
+    return render_template('admin/edit_pet.html', pet=pet, owner=owner)
+
+@app.route('/admin/delete-pet/<int:pet_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_pet(pet_id):
+    # Get pet data with owner information
+    cursor.execute("""
+        SELECT pets.*, users.email AS owner_email, users.full_name AS owner_name
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.id = %s
+    """, (pet_id,))
+    pet = cursor.fetchone()
+
+    if not pet:
+        return jsonify({'success': False, 'message': 'Pet not found'})
+
+    pet_name = pet['name']
+    owner_email = pet['owner_email']
+    owner_name = pet['owner_name']
+
+    # Delete associated data first
+    cursor.execute("DELETE FROM comments WHERE pet_id = %s", (pet_id,))
+    cursor.execute("DELETE FROM vaccinations WHERE pet_id = %s", (pet_id,))
+    cursor.execute("DELETE FROM pets WHERE id = %s", (pet_id,))
+    db.commit()
+
+    # Send email notification to pet owner
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"Pet Registration Deleted - {pet_name}",
+        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+        msg['To'] = owner_email
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>{app.config['COMPANY_NAME']} - Pet Registration Deleted</h1>
+            </div>
+            <div class="content">
+                <p>Dear {owner_name},</p>
+                <p>This is to inform you that the registration for your pet <strong>{pet_name}</strong> has been deleted from our system by an administrator.</p>
+                <p>If you believe this was done in error or have any questions, please contact the Pila Pets administration immediately.</p>
+                <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+            </div>
+            <div class="footer">
+                <p>This is an automated message. Please do not reply to this email.</p>
+                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        {app.config['COMPANY_NAME']} - Pet Registration Deleted
+
+        Dear {owner_name},
+
+        This is to inform you that the registration for your pet {pet_name} has been deleted from our system by an administrator.
+
+        If you believe this was done in error or have any questions, please contact the Pila Pets administration immediately.
+
+        Best regards,
+        Pila Pets Administration
+        Municipality of Pila, Laguna
+
+        This is an automated message. Please do not reply to this email.
+        """
+
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+        server.starttls()
+        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+        server.send_message(msg)
+        server.quit()
+
+        print(f"✅ Pet deletion notification email sent to {owner_email} for pet {pet_name}")
+    except Exception as e:
+        print(f"❌ Failed to send pet deletion email: {e}")
+
+    flash(f'Pet "{pet_name}" deleted successfully', 'success')
+    return jsonify({'success': True, 'message': 'Pet deleted successfully'})
+
+@app.route('/admin/bulk-update-pets', methods=['POST'])
+@login_required
+@admin_required
+def bulk_update_pets():
+    data = request.get_json()
+    pet_ids = data.get('pet_ids', [])
+    action = data.get('action')
+    value = data.get('value')
+
+    if not pet_ids or not action:
+        return jsonify({'success': False, 'message': 'Invalid request data'})
+
+    if action == 'mark_lost':
+        cursor.execute(f"UPDATE pets SET lost = TRUE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
+    elif action == 'mark_found':
+        cursor.execute(f"UPDATE pets SET lost = FALSE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
+    elif action == 'change_category':
+        if not value or value not in ['Dog', 'Cat', 'Other']:
+            return jsonify({'success': False, 'message': 'Invalid category'})
+        cursor.execute(f"UPDATE pets SET category = %s WHERE id IN ({','.join(['%s'] * len(pet_ids))})", [value] + pet_ids)
+    else:
+        return jsonify({'success': False, 'message': 'Invalid action'})
+
+    db.commit()
+    return jsonify({'success': True, 'message': f'Bulk update completed successfully'})
+
+@app.route('/admin/delete-user/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    # Get user data
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found'})
+
+    if user['is_admin']:
+        return jsonify({'success': False, 'message': 'Cannot delete admin user'})
+
+    # Delete associated data first
+    cursor.execute("DELETE FROM comments WHERE user_id = %s", (user_id,))
+    cursor.execute("DELETE FROM vaccinations WHERE pet_id IN (SELECT id FROM pets WHERE owner_id = %s)", (user_id,))
+    cursor.execute("DELETE FROM pets WHERE owner_id = %s", (user_id,))
+    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    db.commit()
+
+    flash(f'User "{user["full_name"]}" and all associated data deleted successfully', 'success')
+    return jsonify({'success': True, 'message': 'User deleted successfully'})
+
+@app.route('/admin/lost-pets')
+@admin_required
+def admin_lost_pets():
+    # Get all lost pets with owner information and comments
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+               users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.lost = TRUE
+        ORDER BY pets.registered_on DESC
+    """)
+    lost_pets = cursor.fetchall()
+
+    # Get comments for each lost pet
+    for pet in lost_pets:
+        cursor.execute("""
+            SELECT comments.*, users.full_name AS commenter_name
+            FROM comments
+            LEFT JOIN users ON comments.user_id = users.id
+            WHERE comments.pet_id = %s
+            ORDER BY comments.created_at DESC
+        """, (pet['id'],))
+        pet['comments'] = cursor.fetchall()
+
+    # Get statistics
+    cursor.execute("SELECT COUNT(*) AS total FROM comments")
+    total_comments = cursor.fetchone()['total']
+
+    # Get recent reports (last 7 days)
+    cursor.execute("""
+        SELECT COUNT(*) AS total FROM pets
+        WHERE lost = TRUE AND registered_on >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    """)
+    recent_reports = cursor.fetchone()['total']
+
+    return render_template('admin/lost_pets.html',
+                         lost_pets=lost_pets,
+                         total_comments=total_comments,
+                         recent_reports=recent_reports)
+
+@app.route('/admin/mark-pet-found/<int:pet_id>', methods=['POST'])
+@admin_required
+def mark_pet_found(pet_id):
+    data = request.get_json()
+    note = data.get('note', '').strip() if data else ''
+
+    # Update pet as found
+    cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
+    db.commit()
+
+    # Get pet and owner info for email
+    cursor.execute("""
+        SELECT pets.name, users.email, users.full_name
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.id = %s
+    """, (pet_id,))
+    pet_info = cursor.fetchone()
+
+    if pet_info:
+        pet_name = pet_info['name']
+        owner_email = pet_info['email']
+        owner_name = pet_info['full_name']
+
+        # Send email notification to owner
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Good News! Your pet {pet_name} has been found",
+            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+            msg['To'] = owner_email
+
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>{app.config['COMPANY_NAME']} - Pet Found!</h1>
+                </div>
+                <div class="content">
+                    <p>Dear {owner_name},</p>
+                    <p>Great news! Your lost pet {pet_name} has been marked as found in our system.</p>
+                    {("<p><strong>Admin Note:</strong> " + note + "</p>") if note else ""}
+                    <p>Please contact the Pila Pets administration for more details about the reunion process.</p>
+                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated message. Please do not reply to this email.</p>
+                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_content = f"""
+            {app.config['COMPANY_NAME']} - Pet Found!
+
+            Dear {owner_name},
+
+            Great news! Your lost pet {pet_name} has been marked as found in our system.
+
+            {("Admin Note: " + note) if note else ""}
+
+            Please contact the Pila Pets administration for more details about the reunion process.
+
+            Best regards,
+            Pila Pets Administration
+            Municipality of Pila, Laguna
+
+            This is an automated message. Please do not reply to this email.
+            """
+
+            part1 = MIMEText(text_content, 'plain')
+            part2 = MIMEText(html_content, 'html')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+            server.starttls()
+            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+            server.send_message(msg)
+            server.quit()
+
+            print(f"✅ Found pet notification email sent to {owner_email}")
+        except Exception as e:
+            print(f"❌ Failed to send found pet email: {e}")
+
+        # Add admin note as comment if provided
+        if note:
+            cursor.execute("""
+                INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
+                VALUES (%s, %s, %s, TRUE)
+            """, (pet_id, session['user_id'], f"ADMIN NOTE: {note}",))
+            db.commit()
+
+    flash(f'Pet "{pet_info["name"] if pet_info else "Unknown"}" has been marked as found.', 'success')
+    return jsonify({'success': True})
+
+@app.route('/admin/lost-pet/<int:pet_id>/reply', methods=['POST'])
+@admin_required
+def admin_reply_to_lost_pet(pet_id):
+    reply = request.form.get('reply', '').strip()
+
+    if not reply:
+        return jsonify({'success': False, 'message': 'Reply cannot be empty'})
+
+    # Insert admin reply as comment
+    cursor.execute("""
+        INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
+        VALUES (%s, %s, %s, TRUE)
+    """, (pet_id, session['user_id'], reply))
+    db.commit()
+
+    # Get pet and owner info for email notification
+    cursor.execute("""
+        SELECT pets.name, users.email, users.full_name
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.id = %s
+    """, (pet_id,))
+    pet_info = cursor.fetchone()
+
+    if pet_info:
+        pet_name = pet_info['name']
+        owner_email = pet_info['email']
+        owner_name = pet_info['full_name']
+
+        # Send email notification to owner
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Update on your lost pet {pet_name}",
+            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+            msg['To'] = owner_email
+
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>{app.config['COMPANY_NAME']} - Update on Lost Pet</h1>
+                </div>
+                <div class="content">
+                    <p>Dear {owner_name},</p>
+                    <p>There's an update regarding your lost pet {pet_name}:</p>
+                    <div style="background: #fff; padding: 15px; border-left: 4px solid #FF6B35; margin: 20px 0;">
+                        <strong>Admin Reply:</strong><br>{reply}
+                    </div>
+                    <p>Please check the lost pets page for more details.</p>
+                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated message. Please do not reply to this email.</p>
+                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                </div>
+            </body>
+            </html>
+            """
+
+            text_content = f"""
+            {app.config['COMPANY_NAME']} - Update on Lost Pet
+
+            Dear {owner_name},
+
+            There's an update regarding your lost pet {pet_name}:
+
+            Admin Reply: {reply}
+
+            Please check the lost pets page for more details.
+
+            Best regards,
+            Pila Pets Administration
+            Municipality of Pila, Laguna
+
+            This is an automated message. Please do not reply to this email.
+            """
+
+            part1 = MIMEText(text_content, 'plain')
+            part2 = MIMEText(html_content, 'html')
+            msg.attach(part1)
+            msg.attach(part2)
+
+            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+            server.starttls()
+            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+            server.send_message(msg)
+            server.quit()
+
+            print(f"✅ Admin reply notification email sent to {owner_email}")
+        except Exception as e:
+            print(f"❌ Failed to send admin reply email: {e}")
+
+    return jsonify({'success': True})
+
+@app.route('/admin/approve-comment/<int:comment_id>', methods=['POST'])
+@admin_required
+def approve_comment(comment_id):
+    # For now, just mark as approved (could add an approved field to comments table)
+    # Since we don't have an approved field, we'll just return success
+    # In a real implementation, you'd update a status field
+    return jsonify({'success': True, 'message': 'Comment approved'})
+
+@app.route('/admin/delete-comment/<int:comment_id>', methods=['POST'])
+@admin_required
+def delete_comment(comment_id):
+    cursor.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
+    db.commit()
+
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port = 5000, debug=True)

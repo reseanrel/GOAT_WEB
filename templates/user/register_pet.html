@@ -16,6 +16,9 @@
                 <a href="{{ url_for('my_pets') }}" class="nav-link">
                     <i class="fas fa-paw me-2"></i>My Pets
                 </a>
+                <a href="{{ url_for('lost_pets') }}" class="nav-link">
+                    <i class="fas fa-search me-2"></i>Lost Pets
+                </a>
                 <a href="{{ url_for('logout') }}" class="nav-link">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
@@ -37,14 +40,19 @@
                         <h5 class="card-title">Add your pet's information to the registration system.</h5>
                         <hr>
                         
-                        <form method="POST">
+                        <form method="POST" enctype="multipart/form-data">
                             <!-- Pet Photo Section -->
                             <div class="mb-4">
-                                <h6><i class="fas fa-camera me-2"></i>Pet Photo (Optional)</h6>
-                                <div class="border rounded p-4 text-center" style="background: #f8f9fa; cursor: pointer;">
-                                    <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
-                                    <p class="mb-0 text-muted">Click to upload pet photo</p>
+                                <h6><i class="fas fa-camera me-2"></i>Pet Photos (Optional)</h6>
+                                <div class="border rounded p-4 text-center" style="background: #f8f9fa;">
+                                    <input type="file" name="pet_photos" id="pet_photos" class="d-none" accept="image/*" multiple>
+                                    <label for="pet_photos" class="cursor-pointer">
+                                        <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                        <p class="mb-0 text-muted">Click to upload pet photos</p>
+                                        <small class="text-muted">PNG, JPG, JPEG, GIF up to 16MB each (max 10 photos)</small>
+                                    </label>
                                 </div>
+                                <div id="photos-preview" class="row mt-3"></div>
                             </div>
 
                             <hr>
@@ -96,6 +104,16 @@
                                 </div>
                             </div>
 
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="for_adoption" id="for_adoption">
+                                    <label class="form-check-label" for="for_adoption">
+                                        Available for Adoption
+                                    </label>
+                                </div>
+                                <small class="text-muted">Check this box if you want to make this pet available for adoption.</small>
+                            </div>
+
                             <hr>
 
                             <!-- Owner Information -->
@@ -123,4 +141,47 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('pet_photos').addEventListener('change', function(e) {
+    const files = e.target.files;
+    const previewContainer = document.getElementById('photos-preview');
+    previewContainer.innerHTML = '';
+
+    if (files.length > 0) {
+        Array.from(files).forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const col = document.createElement('div');
+                col.className = 'col-md-3 col-sm-6';
+                col.innerHTML = `
+                    <div class="position-relative">
+                        <img src="${e.target.result}" alt="Preview ${index + 1}" class="img-thumbnail" style="width: 100%; height: 120px; object-fit: cover;">
+                        <button type="button" class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-1" onclick="removePhoto(${index})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                previewContainer.appendChild(col);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+});
+
+function removePhoto(index) {
+    const input = document.getElementById('pet_photos');
+    const files = Array.from(input.files);
+    files.splice(index, 1);
+
+    // Create new FileList
+    const dt = new DataTransfer();
+    files.forEach(file => dt.items.add(file));
+    input.files = dt.files;
+
+    // Trigger change event to update preview
+    input.dispatchEvent(new Event('change'));
+}
+</script>
+
 {% endblock %}

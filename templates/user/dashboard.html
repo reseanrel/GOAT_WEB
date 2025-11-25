@@ -24,6 +24,12 @@
                 <a href="{{ url_for('my_pets') }}" class="nav-link">
                     <i class="fas fa-paw me-2"></i>My Pets
                 </a>
+                <a href="{{ url_for('adoption') }}" class="nav-link">
+                    <i class="fas fa-heart me-2"></i>Adoption
+                </a>
+                <a href="{{ url_for('lost_pets') }}" class="nav-link">
+                    <i class="fas fa-search me-2"></i>Lost Pets
+                </a>
                 <a href="{{ url_for('logout') }}" class="nav-link">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
@@ -88,6 +94,18 @@
                                 <div class="col-md-4">
                                     <div class="pet-card card fade-in">
                                         <div class="card-body">
+                                            {% if pet.photos %}
+                                            <div class="text-center mb-3">
+                                                <div class="pet-photo-container">
+                                                    <img src="{{ url_for('static', filename='uploads/' + pet.photos[0].photo_url) }}" alt="{{ pet.name }}" class="pet-photo rounded-circle shadow-sm" style="width: 120px; height: 120px; object-fit: cover; border: 3px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                                                    {% if pet.photos|length > 1 %}
+                                                    <div class="photo-count-badge">
+                                                        <span class="badge bg-primary">{{ pet.photos|length }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            {% endif %}
                                             <div class="d-flex justify-content-between align-items-start mb-2">
                                                 <h6 class="card-title">{{ pet.name }}</h6>
                                                 <span class="badge bg-primary">{{ pet.category }}</span>
@@ -121,6 +139,63 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.pet-photo-container {
+    position: relative;
+    display: inline-block;
+}
+
+.pet-photo-container::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    z-index: -1;
+}
+
+.pet-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border: none;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.pet-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.pet-photo {
+    transition: transform 0.3s ease;
+}
+
+.pet-photo:hover {
+    transform: scale(1.05);
+}
+
+.photo-count-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #007bff;
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+</style>
 {% endblock %}
 
 {% block scripts %}

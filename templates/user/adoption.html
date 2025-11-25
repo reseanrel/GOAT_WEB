@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Pet Adoption - {{ session.user_name }}{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="close-sidebar d-md-none" id="closeSidebar">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+                <p class="mb-0">Municipality of Pila, Laguna</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
+                    <i class="fas fa-home me-2"></i>Dashboard
+                </a>
+                <a href="{{ url_for('my_pets') }}" class="nav-link">
+                    <i class="fas fa-paw me-2"></i>My Pets
+                </a>
+                <a href="{{ url_for('adoption') }}" class="nav-link active">
+                    <i class="fas fa-heart me-2"></i>Adoption
+                </a>
+                <a href="{{ url_for('lost_pets') }}" class="nav-link">
+                    <i class="fas fa-search me-2"></i>Lost Pets
+                </a>
+                <a href="{{ url_for('logout') }}" class="nav-link">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2"><i class="fas fa-heart text-danger"></i> Pet Adoption</h1>
+                </div>
+
+            <!-- Adoption Info Alert -->
+            <div class="alert alert-info" role="alert">
+                <h5><i class="fas fa-info-circle"></i> How Adoption Works</h5>
+                <p>Here you can browse pets available for adoption. If you're interested in adopting a pet, click "Express Interest" to send a message to the pet owner. The owner will be notified and can contact you directly.</p>
+            </div>
+
+            {% if adoption_pets %}
+                <div class="row">
+                    {% for pet in adoption_pets %}
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card h-100 shadow-sm">
+                            {% if pet.photo_url %}
+                                <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" class="card-img-top" alt="{{ pet.name }}" style="height: 200px; object-fit: cover;">
+                            {% else %}
+                                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                    <i class="fas fa-paw fa-3x text-muted"></i>
+                                </div>
+                            {% endif %}
+
+                            <div class="card-body d-flex flex-column">
+                                <h5 class="card-title">{{ pet.name }}</h5>
+                                <div class="mb-2">
+                                    <span class="badge badge-primary">{{ pet.category }}</span>
+                                    {% if pet.pet_type %}
+                                        <span class="badge badge-secondary">{{ pet.pet_type }}</span>
+                                    {% endif %}
+                                    <span class="badge badge-info">{{ pet.age }} year(s) old</span>
+                                </div>
+
+                                {% if pet.color %}
+                                    <p class="card-text"><strong>Color:</strong> {{ pet.color }}</p>
+                                {% endif %}
+                                {% if pet.gender %}
+                                    <p class="card-text"><strong>Gender:</strong> {{ pet.gender }}</p>
+                                {% endif %}
+
+                                <div class="mt-auto">
+                                    <p class="card-text small text-muted">
+                                        <i class="fas fa-user"></i> Owner: {{ pet.owner_name }}
+                                    </p>
+                                    <p class="card-text small text-muted">
+                                        <i class="fas fa-calendar"></i> Listed: {{ pet.registered_on.strftime('%B %d, %Y') }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="card-footer bg-transparent">
+                                <button type="button" class="btn btn-success btn-block" data-toggle="modal" data-target="#interestModal{{ pet.id }}">
+                                    <i class="fas fa-heart"></i> Express Interest
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Interest Modal -->
+                    <div class="modal fade" id="interestModal{{ pet.id }}" tabindex="-1" role="dialog" aria-labelledby="interestModalLabel{{ pet.id }}" aria-hidden="true">
+                        <div class="modal-dialog" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="interestModalLabel{{ pet.id }}">
+                                        <i class="fas fa-heart text-danger"></i> Express Interest in {{ pet.name }}
+                                    </h5>
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                                <form id="interestForm{{ pet.id }}" onsubmit="submitInterest(event, {{ pet.id }})">
+                                    <div class="modal-body">
+                                        <div class="alert alert-info">
+                                            <small>Your interest will be sent to the pet owner. They will receive your name, email, and message.</small>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="message{{ pet.id }}">Message to Owner <span class="text-danger">*</span></label>
+                                            <textarea class="form-control" id="message{{ pet.id }}" name="message" rows="4" placeholder="Tell the owner why you're interested in adopting {{ pet.name }}..." required></textarea>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="contact{{ pet.id }}">Additional Contact (Optional)</label>
+                                            <input type="text" class="form-control" id="contact{{ pet.id }}" name="contact" placeholder="Phone number or other contact info">
+                                            <small class="form-text text-muted">This will be included in your message to the owner.</small>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-paper-plane"></i> Send Interest
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-heart-broken fa-4x text-muted mb-3"></i>
+                    <h3>No Pets Available for Adoption</h3>
+                    <p class="text-muted">There are currently no pets listed for adoption. Check back later!</p>
+                    <a href="{{ url_for('user_dashboard') }}" class="btn btn-primary">
+                        <i class="fas fa-home"></i> Back to Dashboard
+                    </a>
+                </div>
+            {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="successToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-check-circle me-2"></i>
+                <span id="successMessage">Interest submitted successfully!</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+
+    <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="errorMessage">An error occurred. Please try again.</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    burgerMenu.addEventListener('click', function() {
+        sidebar.classList.toggle('sidebar-open');
+    });
+
+    // Close sidebar on close button click
+    closeSidebar.addEventListener('click', function() {
+        sidebar.classList.remove('sidebar-open');
+    });
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+
+/* global bootstrap */
+function submitInterest(event, petId) {
+    event.preventDefault();
+
+    const form = event.target;
+    const formData = new FormData(form);
+
+    // Show loading state
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+    fetch(`/express-adoption-interest/${petId}`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById(`interestModal${petId}`));
+            modal.hide();
+
+            // Show success toast
+            showToast('success', data.message);
+
+            // Reset form
+            form.reset();
+        } else {
+            showToast('error', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'An error occurred. Please try again.');
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+
+function showToast(type, message) {
+    const toastId = type === 'success' ? 'successToast' : 'errorToast';
+    const messageId = type === 'success' ? 'successMessage' : 'errorMessage';
+
+    document.getElementById(messageId).textContent = message;
+
+    const toast = new bootstrap.Toast(document.getElementById(toastId));
+    toast.show();
+}
+</script>
+{% endblock %}
+
+{% block styles %}
+<style>
+.card {
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.badge {
+    margin-right: 5px;
+}
+
+.toast-container {
+    z-index: 1060;
+}
+</style>
+{% endblock %}
