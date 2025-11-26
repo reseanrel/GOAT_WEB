@@ -1,0 +1,32 @@
+<div class="col-md-2 sidebar sidebar-open" id="sidebar">
+    <div class="sidebar-header">
+        <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+        <p class="mb-0">Municipality of Pila, Laguna</p>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('admin_dashboard') }}" class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+            <i class="fas fa-chart-bar me-2"></i>Dashboard
+        </a>
+        <a href="{{ url_for('admin_pets') }}" class="nav-link {% if request.endpoint == 'admin_pets' %}active{% endif %}">
+            <i class="fas fa-paw me-2"></i>All Pets
+        </a>
+        <a href="{{ url_for('admin_pending_pets') }}" class="nav-link {% if request.endpoint == 'admin_pending_pets' %}active{% endif %}">
+            <i class="fas fa-clock me-2"></i>Pending Approvals
+        </a>
+        <a href="{{ url_for('admin_lost_pets') }}" class="nav-link {% if request.endpoint == 'admin_lost_pets' %}active{% endif %}">
+            <i class="fas fa-exclamation-triangle me-2"></i>Lost Pets
+        </a>
+        <a href="{{ url_for('admin_users') }}" class="nav-link {% if request.endpoint == 'admin_users' %}active{% endif %}">
+            <i class="fas fa-users me-2"></i>Users
+        </a>
+        <a href="{{ url_for('admin_archived_users') }}" class="nav-link {% if request.endpoint == 'admin_archived_users' %}active{% endif %}">
+            <i class="fas fa-archive me-2"></i>Archived Users
+        </a>
+        <a href="{{ url_for('admin_archived_pets') }}" class="nav-link {% if request.endpoint == 'admin_archived_pets' %}active{% endif %}">
+            <i class="fas fa-archive me-2"></i>Archived Pets
+        </a>
+        <a href="#" onclick="confirmLogout()" class="nav-link">
+            <i class="fas fa-sign-out-alt me-2"></i>Logout
+        </a>
+    </nav>
+</div>

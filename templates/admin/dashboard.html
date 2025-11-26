@@ -3,38 +3,10 @@
 {% block content %}
 <div class="dashboard-container">
     <!-- Burger Menu Button (Mobile) -->
-    <button class="burger-menu d-md-none" id="burgerMenu">
-        <i class="fas fa-bars"></i>
-    </button>
+    <!-- Removed burger menu button to keep sidebar always visible -->
 
     <div class="row g-0">
-        <!-- Sidebar -->
-        <div class="col-md-2 sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <button class="close-sidebar d-md-none" id="closeSidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
-                <p class="mb-0">Municipality of Pila, Laguna</p>
-            </div>
-            <nav class="sidebar-nav">
-                <a href="{{ url_for('admin_dashboard') }}" class="nav-link active">
-                    <i class="fas fa-chart-bar me-2"></i>Dashboard
-                </a>
-                <a href="{{ url_for('admin_pets') }}" class="nav-link">
-                    <i class="fas fa-paw me-2"></i>All Pets
-                </a>
-                <a href="{{ url_for('admin_lost_pets') }}" class="nav-link">
-                    <i class="fas fa-exclamation-triangle me-2"></i>Lost Pets
-                </a>
-                <a href="{{ url_for('admin_users') }}" class="nav-link">
-                    <i class="fas fa-users me-2"></i>Users
-                </a>
-                <a href="{{ url_for('logout') }}" class="nav-link">
-                    <i class="fas fa-sign-out-alt me-2"></i>Logout
-                </a>
-            </nav>
-        </div>
+        {% include "admin/sidebar.html" %}
 
         <!-- Main Content -->
         <div class="col-md-10 main-content-wrapper">
@@ -66,10 +38,17 @@
                             <small class="text-muted">Reported Lost</small>
                         </div>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-clock me-2"></i>Pending Pets</h6>
+                            <h3 class="text-warning">{{ pending_pets_count }}</h3>
+                            <small class="text-muted">Awaiting Approval</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
                         <div class="stats-card">
                             <h6><i class="fas fa-comments me-2"></i>New Comments</h6>
-                            <h3 class="text-warning">{{ new_comments_count }}</h3>
+                            <h3 class="text-info">{{ new_comments_count }}</h3>
                             <small class="text-muted">Total Comments</small>
                         </div>
                     </div>
@@ -122,33 +101,5 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const burgerMenu = document.getElementById('burgerMenu');
-    const closeSidebar = document.getElementById('closeSidebar');
-    const sidebar = document.getElementById('sidebar');
-
-    // Toggle sidebar on burger menu click
-    burgerMenu.addEventListener('click', function() {
-        sidebar.classList.toggle('sidebar-open');
-    });
-
-    // Close sidebar on close button click
-    closeSidebar.addEventListener('click', function() {
-        sidebar.classList.remove('sidebar-open');
-    });
-
-    // Close sidebar when clicking outside on mobile
-    document.addEventListener('click', function(event) {
-        if (window.innerWidth < 768) {
-            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
-                sidebar.classList.remove('sidebar-open');
-            }
-        }
-    });
-});
-</script>
 {% endblock %}

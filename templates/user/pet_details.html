@@ -21,13 +21,16 @@
                 <a href="{{ url_for('user_dashboard') }}" class="nav-link">
                     <i class="fas fa-home me-2"></i>Dashboard
                 </a>
-                <a href="{{ url_for('my_pets') }}" class="nav-link">
-                    <i class="fas fa-paw me-2"></i>My Pets
+                <a href="{{ url_for('adoption') }}" class="nav-link">
+                    <i class="fas fa-heart me-2"></i>Adoption
                 </a>
                 <a href="{{ url_for('lost_pets') }}" class="nav-link">
                     <i class="fas fa-search me-2"></i>Lost Pets
                 </a>
-                <a href="{{ url_for('logout') }}" class="nav-link">
+                <a href="{{ url_for('edit_profile') }}" class="nav-link">
+                    <i class="fas fa-user-edit me-2"></i>Edit Profile
+                </a>
+                <a href="#" onclick="confirmLogout()" class="nav-link">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
             </nav>
@@ -38,8 +41,8 @@
             <div class="main-content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h3>Pet Details</h3>
-                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
                     </a>
                 </div>
 
@@ -109,26 +112,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Owner Information -->
-                                <div class="mt-4">
-                                    <h6><i class="fas fa-user me-2"></i>Owner Information</h6>
-                                    <div class="user-info">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <p><strong>Name:</strong> {{ owner.full_name }}</p>
-                                                <p><strong>Email:</strong> {{ owner.email }}</p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                {% if owner.contact_number %}
-                                                <p><strong>Contact Number:</strong> {{ owner.contact_number }}</p>
-                                                {% endif %}
-                                                {% if owner.address %}
-                                                <p><strong>Address:</strong> {{ owner.address }}</p>
-                                                {% endif %}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                <!-- Owner Information Removed -->
                             </div>
 
                             <!-- Quick Actions -->
@@ -139,8 +123,11 @@
                                     </div>
                                     <div class="card-body">
                                         <div class="d-grid gap-2">
+                                            <a href="{{ url_for('edit_pet', pet_id=pet.id) }}" class="btn btn-outline-secondary">
+                                                <i class="fas fa-edit me-2"></i>Edit Pet Details
+                                            </a>
                                             <a href="{{ url_for('vaccination_records', pet_id=pet.id) }}" class="btn btn-outline-primary">
-                                                <i class="fas fa-syringe me-2"></i>Vaccination Records
+                                                <i class="fas fa-plus-circle me-2"></i>Add Medical Records
                                             </a>
                                             {% if not pet.photo_url %}
                                             <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#uploadPhotoModal" data-pet-id="{{ pet.id }}">
@@ -159,6 +146,57 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vaccination Records -->
+                <div class="row mt-4">
+                    <div class="col-md-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-syringe me-2"></i>Vaccination Records</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if vaccinations %}
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th>Vaccine Name</th>
+                                                    <th>Date Administered</th>
+                                                    <th>Next Due Date</th>
+                                                    <th>Administered By</th>
+                                                    <th>Notes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for vaccination in vaccinations %}
+                                                <tr>
+                                                    <td><strong>{{ vaccination.vaccine_name }}</strong></td>
+                                                    <td>{{ vaccination.date_administered.strftime('%m/%d/%Y') if vaccination.date_administered else 'N/A' }}</td>
+                                                    <td>
+                                                        {% if vaccination.next_due_date %}
+                                                            <span class="badge bg-{% if vaccination.next_due_date < datetime.now().date() %}danger{% else %}success{% endif %}">
+                                                                {{ vaccination.next_due_date.strftime('%m/%d/%Y') }}
+                                                            </span>
+                                                        {% else %}
+                                                            N/A
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>{{ vaccination.administered_by or 'N/A' }}</td>
+                                                    <td>{{ vaccination.notes or 'N/A' }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle me-2"></i>No vaccination records found for this pet.
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -499,5 +537,6 @@ function submitPhotoUpload() {
         submitBtn.innerHTML = originalText;
     });
 }
+
 </script>
 {% endblock %}

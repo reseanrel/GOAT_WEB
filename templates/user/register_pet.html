@@ -13,13 +13,13 @@
                 <a href="{{ url_for('user_dashboard') }}" class="nav-link">
                     <i class="fas fa-home me-2"></i>Dashboard
                 </a>
-                <a href="{{ url_for('my_pets') }}" class="nav-link">
-                    <i class="fas fa-paw me-2"></i>My Pets
+                <a href="{{ url_for('adoption') }}" class="nav-link">
+                    <i class="fas fa-heart me-2"></i>Adoption
                 </a>
                 <a href="{{ url_for('lost_pets') }}" class="nav-link">
                     <i class="fas fa-search me-2"></i>Lost Pets
                 </a>
-                <a href="{{ url_for('logout') }}" class="nav-link">
+                <a href="#" onclick="confirmLogout()" class="nav-link">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
             </nav>
@@ -30,8 +30,8 @@
             <div class="main-content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h3>Register New Pet</h3>
-                    <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to My Pets
+                    <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
                     </a>
                 </div>
 
@@ -127,7 +127,7 @@
                             </div>
 
                             <div class="d-flex justify-content-between mt-4">
-                                <a href="{{ url_for('my_pets') }}" class="btn btn-outline-secondary">
+                                <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-secondary">
                                     <i class="fas fa-times me-2"></i>Cancel
                                 </a>
                                 <button type="submit" class="btn btn-primary">
@@ -182,6 +182,7 @@ function removePhoto(index) {
     // Trigger change event to update preview
     input.dispatchEvent(new Event('change'));
 }
+
 </script>
 
 {% endblock %}

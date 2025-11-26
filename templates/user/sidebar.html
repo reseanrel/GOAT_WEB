@@ -1,0 +1,23 @@
+<div class="col-md-2 sidebar sidebar-open" id="sidebar">
+    <div class="sidebar-header">
+        <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
+        <p class="mb-0">Municipality of Pila, Laguna</p>
+    </div>
+    <nav class="sidebar-nav">
+        <a href="{{ url_for('user_dashboard') }}" class="nav-link {% if request.endpoint == 'user_dashboard' %}active{% endif %}">
+            <i class="fas fa-home me-2"></i>Dashboard
+        </a>
+        <a href="{{ url_for('adoption') }}" class="nav-link {% if request.endpoint == 'adoption' %}active{% endif %}">
+            <i class="fas fa-heart me-2"></i>Adoption
+        </a>
+        <a href="{{ url_for('lost_pets') }}" class="nav-link {% if request.endpoint == 'lost_pets' %}active{% endif %}">
+            <i class="fas fa-search me-2"></i>Lost Pets
+        </a>
+        <a href="{{ url_for('edit_profile') }}" class="nav-link {% if request.endpoint == 'edit_profile' %}active{% endif %}">
+            <i class="fas fa-user-edit me-2"></i>Edit Profile
+        </a>
+        <a href="#" onclick="confirmLogout()" class="nav-link">
+            <i class="fas fa-sign-out-alt me-2"></i>Logout
+        </a>
+    </nav>
+</div>

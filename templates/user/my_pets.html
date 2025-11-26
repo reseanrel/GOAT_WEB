@@ -8,30 +8,7 @@
     </button>
 
     <div class="row g-0">
-        <!-- Sidebar -->
-        <div class="col-md-2 sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <button class="close-sidebar d-md-none" id="closeSidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
-                <p class="mb-0">Municipality of Pila, Laguna</p>
-            </div>
-            <nav class="sidebar-nav">
-                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
-                    <i class="fas fa-home me-2"></i>Dashboard
-                </a>
-                <a href="{{ url_for('my_pets') }}" class="nav-link active">
-                    <i class="fas fa-paw me-2"></i>My Pets
-                </a>
-                <a href="{{ url_for('lost_pets') }}" class="nav-link">
-                    <i class="fas fa-search me-2"></i>Lost Pets
-                </a>
-                <a href="{{ url_for('logout') }}" class="nav-link">
-                    <i class="fas fa-sign-out-alt me-2"></i>Logout
-                </a>
-            </nav>
-        </div>
+        {% include "user/sidebar.html" %}
 
         <!-- Main Content -->
         <div class="col-md-10 main-content-wrapper">
@@ -41,25 +18,6 @@
                     <a href="{{ url_for('register_pet') }}" class="btn btn-success">
                         <i class="fas fa-plus me-2"></i>Add New Pet
                     </a>
-                </div>
-
-                <!-- Owner Information -->
-                <div class="user-info">
-                    <h5><i class="fas fa-user me-2"></i>Owner Information</h5>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Name:</strong> {{ user_name }}</p>
-                            <p><strong>Email:</strong> {{ user_email }}</p>
-                        </div>
-                        <div class="col-md-6">
-                            {% if user_contact %}
-                            <p><strong>Contact Number:</strong> {{ user_contact }}</p>
-                            {% endif %}
-                            {% if user_address %}
-                            <p><strong>Address:</strong> {{ user_address }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Pets Section -->
@@ -82,7 +40,16 @@
         {% endif %}
         <div class="d-flex justify-content-between align-items-start mb-2">
             <h6 class="card-title mb-0">{{ pet.name }}</h6>
-            <span class="badge bg-primary">{{ pet.category }}</span>
+            <div>
+                <span class="badge bg-primary">{{ pet.category }}</span>
+                {% if pet.status == 'pending' %}
+                <span class="badge bg-warning ms-1">Pending Approval</span>
+                {% elif pet.status == 'approved' %}
+                <span class="badge bg-success ms-1">Approved</span>
+                {% elif pet.status == 'rejected' %}
+                <span class="badge bg-danger ms-1">Rejected</span>
+                {% endif %}
+            </div>
         </div>
         <p class="card-text">
             <small class="text-muted">
@@ -94,7 +61,6 @@
         </p>
         <div class="btn-group w-100 mt-auto">
             <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-sm btn-outline-primary">Details</a>
-            <a href="{{ url_for('vaccination_records', pet_id=pet.id) }}" class="btn btn-sm btn-outline-success">Vaccinations</a>
         </div>
     </div>
 </div>
@@ -145,5 +111,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+function confirmLogout() {
+    var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+    logoutModal.show();
+}
 </script>
 {% endblock %}

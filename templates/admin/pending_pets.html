@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Pending Pet Approvals - Admin{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <!-- Removed burger menu button to keep sidebar always visible -->
+
+    <div class="row g-0">
+        {% include "admin/sidebar.html" %}
+
+        <!-- Main Content -->
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3><i class="fas fa-clock me-2"></i>Pending Pet Approvals</h3>
+                        <p class="text-muted mb-0">Review and approve pet registrations</p>
+                    </div>
+                    <div class="text-end">
+                        <h6 class="mb-0">{{ session.user_name }}</h6>
+                        <span class="badge bg-danger">Administrator</span>
+                    </div>
+                </div>
+
+                {% if pending_pets %}
+                    <div class="row">
+                        {% for pet in pending_pets %}
+                        <div class="col-md-6 col-lg-4 mb-4">
+                            <div class="card h-100 border-warning">
+                                <div class="card-header bg-warning text-dark">
+                                    <h5 class="card-title mb-0">
+                                        <i class="fas fa-clock me-2"></i>{{ pet.name }}
+                                    </h5>
+                                    <small class="text-muted">Pending Approval</small>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <table class="table table-sm table-borderless">
+                                                <tr>
+                                                    <td><strong>Category:</strong></td>
+                                                    <td>{{ pet.category }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Type:</strong></td>
+                                                    <td>{{ pet.pet_type or 'Not specified' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Age:</strong></td>
+                                                    <td>{{ pet.age }} year(s)</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Color:</strong></td>
+                                                    <td>{{ pet.color or 'Not specified' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Gender:</strong></td>
+                                                    <td>{{ pet.gender or 'Not specified' }}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><strong>Registered:</strong></td>
+                                                    <td>{{ pet.registered_on.strftime('%m/%d/%Y') }}</td>
+                                                </tr>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {% if pet.photo_url %}
+                                    <div class="text-center mt-3">
+                                        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}"
+                                             alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 150px;">
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="card-footer">
+                                    <h6 class="text-primary mb-2"><i class="fas fa-user me-2"></i>Owner Information</h6>
+                                    <div class="small mb-3">
+                                        <p class="mb-1"><strong>Name:</strong> {{ pet.owner_name }}</p>
+                                        {% if pet.owner_email %}
+                                        <p class="mb-1"><strong>Email:</strong> {{ pet.owner_email }}</p>
+                                        {% endif %}
+                                        {% if pet.owner_contact %}
+                                        <p class="mb-1"><strong>Contact:</strong> {{ pet.owner_contact }}</p>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-success btn-sm flex-fill"
+                                                onclick="approvePet({{ pet.id }}, '{{ pet.name }}')">
+                                            <i class="fas fa-check me-1"></i>Approve
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm flex-fill"
+                                                onclick="rejectPet({{ pet.id }}, '{{ pet.name }}')">
+                                            <i class="fas fa-times me-1"></i>Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
+                        <h3>No Pending Approvals</h3>
+                        <p class="text-muted">All pet registrations have been reviewed. Great job!</p>
+                        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">
+                            <i class="fas fa-home"></i> Back to Dashboard
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="successToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-check-circle me-2"></i>
+                <span id="successMessage">Operation completed successfully!</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+
+    <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="errorMessage">An error occurred. Please try again.</span>
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function approvePet(petId, petName) {
+    if (!confirm(`Are you sure you want to approve the registration for "${petName}"?`)) {
+        return;
+    }
+
+    // Show loading state
+    const buttons = document.querySelectorAll(`button[onclick*="${petId}"]`);
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    });
+
+    fetch(`/admin/approve-pet/${petId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', `Pet "${petName}" has been approved successfully!`);
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showToast('error', data.message);
+            // Re-enable buttons
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = btn.onclick.toString().includes('approvePet') ?
+                    '<i class="fas fa-check me-1"></i>Approve' :
+                    '<i class="fas fa-times me-1"></i>Reject';
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'An error occurred. Please try again.');
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.onclick.toString().includes('approvePet') ?
+                '<i class="fas fa-check me-1"></i>Approve' :
+                '<i class="fas fa-times me-1"></i>Reject';
+        });
+    });
+}
+
+function rejectPet(petId, petName) {
+    if (!confirm(`Are you sure you want to reject the registration for "${petName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    // Show loading state
+    const buttons = document.querySelectorAll(`button[onclick*="${petId}"]`);
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    });
+
+    fetch(`/admin/reject-pet/${petId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', `Pet "${petName}" has been rejected.`);
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showToast('error', data.message);
+            // Re-enable buttons
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = btn.onclick.toString().includes('approvePet') ?
+                    '<i class="fas fa-check me-1"></i>Approve' :
+                    '<i class="fas fa-times me-1"></i>Reject';
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'An error occurred. Please try again.');
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.onclick.toString().includes('approvePet') ?
+                '<i class="fas fa-check me-1"></i>Approve' :
+                '<i class="fas fa-times me-1"></i>Reject';
+        });
+    });
+}
+
+function showToast(type, message) {
+    const toastId = type === 'success' ? 'successToast' : 'errorToast';
+    const messageId = type === 'success' ? 'successMessage' : 'errorMessage';
+
+    document.getElementById(messageId).textContent = message;
+
+    const toast = new bootstrap.Toast(document.getElementById(toastId));
+    toast.show();
+}
+</script>
+{% endblock %}

@@ -23,16 +23,16 @@
                 <a href="{{ url_for('user_dashboard') }}" class="nav-link">
                     <i class="fas fa-home me-2"></i>Dashboard
                 </a>
-                <a href="{{ url_for('my_pets') }}" class="nav-link">
-                    <i class="fas fa-paw me-2"></i>My Pets
-                </a>
                 <a href="{{ url_for('adoption') }}" class="nav-link active">
                     <i class="fas fa-heart me-2"></i>Adoption
                 </a>
                 <a href="{{ url_for('lost_pets') }}" class="nav-link">
                     <i class="fas fa-search me-2"></i>Lost Pets
                 </a>
-                <a href="{{ url_for('logout') }}" class="nav-link">
+                <a href="{{ url_for('edit_profile') }}" class="nav-link">
+                    <i class="fas fa-user-edit me-2"></i>Edit Profile
+                </a>
+                <a href="#" onclick="confirmLogout()" class="nav-link">
                     <i class="fas fa-sign-out-alt me-2"></i>Logout
                 </a>
             </nav>
@@ -259,6 +259,11 @@ function showToast(type, message) {
 
     const toast = new bootstrap.Toast(document.getElementById(toastId));
     toast.show();
+}
+
+function confirmLogout() {
+    var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+    logoutModal.show();
 }
 </script>
 {% endblock %}
