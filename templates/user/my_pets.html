@@ -13,72 +13,61 @@
         <!-- Main Content -->
         <div class="col-md-10 main-content-wrapper">
             <div class="main-content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h3>My Pets</h3>
-                    <a href="{{ url_for('register_pet') }}" class="btn btn-success">
-                        <i class="fas fa-plus me-2"></i>Add New Pet
-                    </a>
-                </div>
-
-                <!-- Pets Section -->
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-paw me-2"></i>Registered Pets</h5>
-                        <p class="text-muted mb-0">Manage your pet registrations and vaccination records</p>
-                    </div>
-                    <div class="card-body">
-                        {% if pets %}
-                            <div class="row">
-                                {% for pet in pets %}
-                                <div class="col-md-6 col-lg-4">
-<div class="pet-card card fade-in">
-    <div class="card-body d-flex flex-column h-100">
-        {% if pet.photo_url %}
-        <div class="text-center mb-3">
-            <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-photo rounded-circle" style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-        </div>
-        {% endif %}
-        <div class="d-flex justify-content-between align-items-start mb-2">
-            <h6 class="card-title mb-0">{{ pet.name }}</h6>
-            <div>
-                <span class="badge bg-primary">{{ pet.category }}</span>
-                {% if pet.status == 'pending' %}
-                <span class="badge bg-warning ms-1">Pending Approval</span>
-                {% elif pet.status == 'approved' %}
-                <span class="badge bg-success ms-1">Approved</span>
-                {% elif pet.status == 'rejected' %}
-                <span class="badge bg-danger ms-1">Rejected</span>
-                {% endif %}
-            </div>
-        </div>
-        <p class="card-text">
-            <small class="text-muted">
-                <i class="fas fa-paw me-1"></i>{{ pet.pet_type or 'Not specified' }}<br>
-                <i class="fas fa-venus-mars me-1"></i>{{ pet.gender or 'Not specified' }}<br>
-                <i class="fas fa-calendar me-1"></i>{{ pet.age }} years old<br>
-                <i class="fas fa-palette me-1"></i>{{ pet.color or 'Not specified' }}
-            </small>
-        </p>
-        <div class="btn-group w-100 mt-auto">
-            <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-sm btn-outline-primary">Details</a>
-        </div>
-    </div>
+<div class="header">
+   <div>
+       <h2>Your Pets</h2>
+       <p>Manage all your registered pets in one place</p>
+   </div>
+   <a href="{{ url_for('register_pet') }}" class="add-btn">+ Add New Pet</a>
 </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="text-center py-5">
-                                <i class="fas fa-paw fa-4x text-muted mb-3"></i>
-                                <h5>No Pets Registered</h5>
-                                <p class="text-muted mb-4">You haven't registered any pets yet. Start by adding your first pet!</p>
-                                <a href="{{ url_for('register_pet') }}" class="btn btn-success btn-lg">
-                                    <i class="fas fa-plus me-2"></i>Register Your First Pet
-                                </a>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
+
+<div class="pet-container">
+   {% if pets %}
+       {% for pet in pets %}
+   <div class="pet-card">
+       {% if pet.photo_url %}
+       <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
+       {% else %}
+       <img src="https://via.placeholder.com/260x200" class="pet-img">
+       {% endif %}
+       <div class="tag-bar">
+           {% if pet.category == 'Dog' %}
+           <span class="tag-dog">Dog</span>
+           {% elif pet.category == 'Cat' %}
+           <span class="tag-cat">Cat</span>
+           {% else %}
+           <span class="tag-other">{{ pet.category }}</span>
+           {% endif %}
+           {% if pet.status == 'approved' %}
+           <span class="tag-approved">Approved</span>
+           {% elif pet.status == 'pending' %}
+           <span class="tag-pending">Pending</span>
+           {% elif pet.status == 'rejected' %}
+           <span class="tag-rejected">Rejected</span>
+           {% endif %}
+       </div>
+       <div class="details">
+           <div class="pet-name">{{ pet.name }}</div>
+           <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
+           <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
+           <p><strong>Age:</strong> {{ pet.age }} years</p>
+           <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
+
+           <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="details-btn">Details →</a>
+       </div>
+   </div>
+       {% endfor %}
+   {% else %}
+       <div class="text-center py-5" style="width: 100%;">
+           <i class="fas fa-paw fa-4x text-muted mb-3"></i>
+           <h5>No Pets Registered</h5>
+           <p class="text-muted mb-4">You haven't registered any pets yet. Start by adding your first pet!</p>
+           <a href="{{ url_for('register_pet') }}" class="btn btn-success btn-lg">
+               <i class="fas fa-plus me-2"></i>Register Your First Pet
+           </a>
+       </div>
+   {% endif %}
+</div>
             </div>
         </div>
     </div>

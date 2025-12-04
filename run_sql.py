@@ -15,7 +15,7 @@ conn = psycopg2.connect(database_url)
 cursor = conn.cursor()
 
 # Read and execute SQL file
-sql_file = 'add_missing_pet_columns.sql'
+sql_file = 'update_vaccinations_to_medical_records.sql'
 with open(sql_file, 'r') as file:
     sql_script = file.read()
 

@@ -53,88 +53,55 @@
                     </div>
                 </div>
 
-                <div class="card">
-                    <div class="card-body">
-                        {% if pets %}
-                            <div class="table-responsive">
-                                <table class="table table-striped" id="petsTable">
-                                    <thead>
-                                        <tr>
-                                            <th><input type="checkbox" id="selectAllCheckbox"></th>
-                                            <th>ID</th>
-                                            <th>Pet Name</th>
-                                            <th>Category</th>
-                                            <th>Type</th>
-                                            <th>Age</th>
-                                            <th>Gender</th>
-                                            <th>Color</th>
-                                            <th>Owner</th>
-                                            <th>Contact</th>
-                                            <th>Address</th>
-                                            <th>Registered</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for pet in pets %}
-                                        <tr class="pet-row" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
-                                            <td><input type="checkbox" class="pet-checkbox" value="{{ pet.id }}"></td>
-                                            <td>{{ pet.id }}</td>
-                                            <td>
-                                                <div class="d-flex align-items-center">
-                                                    {% if pet.photo_url %}
-                                                    <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="rounded me-2" style="width: 40px; height: 40px; object-fit: cover;">
-                                                    {% endif %}
-                                                    <div>
-                                                        <strong>{{ pet.name }}</strong>
-                                                        {% if pet.lost %}
-                                                        <i class="fas fa-exclamation-triangle text-warning ms-1" title="Lost Pet"></i>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td><span class="badge bg-primary">{{ pet.category }}</span></td>
-                                            <td>{{ pet.pet_type or 'N/A' }}</td>
-                                            <td>{{ pet.age }} years</td>
-                                            <td>{{ pet.gender or 'N/A' }}</td>
-                                            <td>{{ pet.color or 'N/A' }}</td>
-                                            <td>{{ pet.owner_name }}</td>
-                                            <td>{{ pet.owner_contact }}</td>
-                                            <td>{{ pet.owner_address }}</td>
-                                            <td>{{ pet.registered_on.strftime('%m/%d/%Y') }}</td>
-                                            <td>
-                                                {% if pet.lost %}
-                                                <span class="badge bg-danger">
-                                                    <i class="fas fa-exclamation-triangle me-1"></i>Lost
-                                                </span>
-                                                {% else %}
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-check me-1"></i>Safe
-                                                </span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <div class="btn-group" role="group">
-                                                    <button class="btn btn-sm btn-outline-warning archive-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" title="Archive Pet">
-                                                        <i class="fas fa-archive"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        {% else %}
-                            <div class="text-center py-5">
-                                <i class="fas fa-paw fa-4x text-muted mb-3"></i>
-                                <h5>No Pets Registered</h5>
-                                <p class="text-muted">There are no pets registered in the system yet.</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
+<div class="pet-container">
+    {% if pets %}
+        {% for pet in pets %}
+    <div class="pet-card admin-pet-card" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
+        {% if pet.photo_url %}
+        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
+        {% else %}
+        <img src="https://via.placeholder.com/260x200" class="pet-img">
+        {% endif %}
+        <div class="tag-bar">
+            {% if pet.category == 'Dog' %}
+            <span class="tag-dog">Dog</span>
+            {% elif pet.category == 'Cat' %}
+            <span class="tag-cat">Cat</span>
+            {% else %}
+            <span class="tag-other">{{ pet.category }}</span>
+            {% endif %}
+            {% if pet.lost %}
+            <span class="tag-lost">Lost</span>
+            {% else %}
+            <span class="tag-safe">Safe</span>
+            {% endif %}
+        </div>
+        <div class="details">
+            <div class="pet-name">{{ pet.name }}</div>
+            <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
+            <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
+            <p><strong>Age:</strong> {{ pet.age }} years</p>
+            <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
+            <p><strong>Owner:</strong> {{ pet.owner_name }}</p>
+            <p><strong>Contact:</strong> {{ pet.owner_contact or 'Not provided' }}</p>
+            <p><strong>Registered:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
+
+            <div class="admin-actions">
+                <button class="btn btn-sm btn-outline-warning archive-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" title="Archive Pet">
+                    <i class="fas fa-archive"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+        {% endfor %}
+    {% else %}
+        <div class="text-center py-5" style="width: 100%;">
+            <i class="fas fa-paw fa-4x text-muted mb-3"></i>
+            <h5>No Pets Registered</h5>
+            <p class="text-muted">There are no pets registered in the system yet.</p>
+        </div>
+    {% endif %}
+</div>
             </div>
         </div>
     </div>
@@ -198,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const statusFilter = document.getElementById('statusFilter');
     const categoryFilter = document.getElementById('categoryFilter');
-    const petRows = document.querySelectorAll('.pet-row');
+    const petCards = document.querySelectorAll('.admin-pet-card');
 
     function filterPets() {
         if (!statusFilter || !categoryFilter) return;
@@ -206,42 +173,23 @@ document.addEventListener('DOMContentLoaded', function() {
         const statusValue = statusFilter.value;
         const categoryValue = categoryFilter.value;
 
-        petRows.forEach(row => {
-            const status = row.getAttribute('data-status');
-            const category = row.getAttribute('data-category');
+        petCards.forEach(card => {
+            const status = card.getAttribute('data-status');
+            const category = card.getAttribute('data-category');
 
             const statusMatch = statusValue === 'all' || status === statusValue;
             const categoryMatch = categoryValue === 'all' || category === categoryValue;
 
             if (statusMatch && categoryMatch) {
-                row.style.display = '';
+                card.style.display = '';
             } else {
-                row.style.display = 'none';
+                card.style.display = 'none';
             }
         });
     }
 
     if (statusFilter) statusFilter.addEventListener('change', filterPets);
     if (categoryFilter) categoryFilter.addEventListener('change', filterPets);
-
-    // Select all checkbox functionality
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const petCheckboxes = document.querySelectorAll('.pet-checkbox');
-
-    selectAllCheckbox.addEventListener('change', function() {
-        petCheckboxes.forEach(checkbox => {
-            checkbox.checked = selectAllCheckbox.checked;
-        });
-    });
-
-    // Update select all checkbox when individual checkboxes change
-    petCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const checkedBoxes = document.querySelectorAll('.pet-checkbox:checked');
-            selectAllCheckbox.checked = checkedBoxes.length === petCheckboxes.length;
-            selectAllCheckbox.indeterminate = checkedBoxes.length > 0 && checkedBoxes.length < petCheckboxes.length;
-        });
-    });
 
     // Archive pet functionality
     let petToArchive = null;
@@ -270,6 +218,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Close modal immediately for better UX
+        const modal = bootstrap.Modal.getInstance(document.getElementById('archivePetModal'));
+        modal.hide();
+
         fetch(`/admin/archive-pet/${petToArchive.id}`, {
             method: 'POST',
             headers: {
@@ -279,9 +231,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Close modal and reload page
-                const modal = bootstrap.Modal.getInstance(document.getElementById('archivePetModal'));
-                modal.hide();
                 location.reload();
             } else {
                 alert('Error: ' + data.message);

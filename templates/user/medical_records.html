@@ -29,7 +29,7 @@
         <div class="col-md-10">
             <div class="main-content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h3>Vaccination Records - {{ pet.name }}</h3>
+                    <h3>Medical Records - {{ pet.name }}</h3>
                     <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-outline-secondary">
                         <i class="fas fa-arrow-left me-2"></i>Back to Pet Details
                     </a>
@@ -37,26 +37,36 @@
 
                 <div class="card">
                     <div class="card-body">
-                        {% if vaccinations %}
+                        {% if medical_records %}
                             <div class="table-responsive">
                                 <table class="table table-striped">
                                     <thead>
                                         <tr>
-                                            <th>Vaccine Name</th>
-                                            <th>Date Administered</th>
+                                            <th>Record Type</th>
+                                            <th>Date</th>
                                             <th>Next Due Date</th>
-                                            <th>Administered By</th>
-                                            <th>Notes</th>
+                                            <th>Provider</th>
+                                            <th>Description</th>
+                                            <th>Receipt</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {% for vaccination in vaccinations %}
+                                        {% for record in medical_records %}
                                         <tr>
-                                            <td>{{ vaccination.record_type }}</td>
-                                            <td>{{ vaccination.record_date.strftime('%m/%d/%Y') if vaccination.record_date else 'N/A' }}</td>
-                                            <td>{{ vaccination.next_due_date.strftime('%m/%d/%Y') if vaccination.next_due_date else 'N/A' }}</td>
-                                            <td>{{ vaccination.provider or 'N/A' }}</td>
-                                            <td>{{ vaccination.description or 'N/A' }}</td>
+                                            <td>{{ record.record_type }}</td>
+                                            <td>{{ record.record_date.strftime('%m/%d/%Y') }}</td>
+                                            <td>{{ record.next_due_date.strftime('%m/%d/%Y') if record.next_due_date else 'N/A' }}</td>
+                                            <td>{{ record.provider or 'N/A' }}</td>
+                                            <td>{{ record.description or 'N/A' }}</td>
+                                            <td>
+                                                {% if record.photo_url %}
+                                                <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                    <i class="fas fa-image me-1"></i>View
+                                                </a>
+                                                {% else %}
+                                                No receipt
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
@@ -64,19 +74,19 @@
                             </div>
                         {% else %}
                             <div class="text-center py-5">
-                                <i class="fas fa-syringe fa-4x text-muted mb-3"></i>
-                                <h5>No Vaccination Records</h5>
-                                <p class="text-muted mb-4">No vaccination records have been added for this pet yet.</p>
-                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addVaccinationModal">
-                                    <i class="fas fa-plus me-2"></i>Add Vaccination Record
+                                <i class="fas fa-notes-medical fa-4x text-muted mb-3"></i>
+                                <h5>No Medical Records</h5>
+                                <p class="text-muted mb-4">No medical records have been added for this pet yet.</p>
+                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMedicalRecordModal">
+                                    <i class="fas fa-plus me-2"></i>Add Medical Record
                                 </button>
                             </div>
                         {% endif %}
 
-                        {% if vaccinations %}
+                        {% if medical_records %}
                         <div class="text-center mt-3">
-                            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addVaccinationModal">
-                                <i class="fas fa-plus me-2"></i>Add New Vaccination Record
+                            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMedicalRecordModal">
+                                <i class="fas fa-plus me-2"></i>Add New Medical Record
                             </button>
                         </div>
                         {% endif %}
@@ -87,24 +97,24 @@
     </div>
 </div>
 
-<!-- Add Vaccination Modal -->
-<div class="modal fade" id="addVaccinationModal" tabindex="-1">
+<!-- Add Medical Record Modal -->
+<div class="modal fade" id="addMedicalRecordModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Vaccination Record</h5>
+                <h5 class="modal-title">Add Medical Record</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <form id="vaccinationForm">
+            <form id="medicalRecordForm" enctype="multipart/form-data">
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Vaccine Name *</label>
-                        <input type="text" class="form-control" name="vaccine_name" placeholder="e.g., Rabies, DHPP, etc" required>
+                        <label class="form-label">Record Type *</label>
+                        <input type="text" class="form-control" name="record_type" placeholder="e.g., Vaccination, Check-up, Surgery, etc" required>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Date Administered *</label>
-                            <input type="date" class="form-control" name="date_administered" required>
+                            <label class="form-label">Date *</label>
+                            <input type="date" class="form-control" name="record_date" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Next Due Date</label>
@@ -112,12 +122,17 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Administered By</label>
-                        <input type="text" class="form-control" name="administered_by" placeholder="Veterinarian or clinic name">
+                        <label class="form-label">Provider</label>
+                        <input type="text" class="form-control" name="provider" placeholder="Veterinarian or clinic name">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea class="form-control" name="notes" rows="3" placeholder="Any additional notes"></textarea>
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="3" placeholder="Details about the medical record"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Receipt/Photo</label>
+                        <input type="file" class="form-control" name="record_photo" accept="image/*">
+                        <small class="text-muted">Upload a photo of the receipt or medical document (optional)</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -132,30 +147,14 @@
 
 {% block scripts %}
 <script>
-document.getElementById('vaccinationForm').addEventListener('submit', function(e) {
+document.getElementById('medicalRecordForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
-    // Get form data manually
-    const formData = {
-        vaccine_name: document.querySelector('input[name="vaccine_name"]').value.trim(),
-        date_administered: document.querySelector('input[name="date_administered"]').value,
-        next_due_date: document.querySelector('input[name="next_due_date"]').value,
-        administered_by: document.querySelector('input[name="administered_by"]').value.trim(),
-        notes: document.querySelector('textarea[name="notes"]').value.trim()
-    };
+    const formData = new FormData(this);
 
-    // Validate required fields
-    if (!formData.vaccine_name || !formData.date_administered) {
-        alert('Please fill in all required fields (Vaccine Name and Date Administered).');
-        return;
-    }
-
-    fetch("{{ url_for('add_vaccination', pet_id=pet.id) }}", {
+    fetch("{{ url_for('add_medical_record', pet_id=pet.id) }}", {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
+        body: formData
     })
     .then(response => response.json())
     .then(data => {
@@ -167,16 +166,16 @@ document.getElementById('vaccinationForm').addEventListener('submit', function(e
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred while adding the vaccination record.');
+        alert('An error occurred while adding the medical record.');
     });
 });
 
 // Set today's date as default for date fields
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
-    const dateAdministered = document.querySelector('input[name="date_administered"]');
-    if (dateAdministered) {
-        dateAdministered.value = today;
+    const recordDate = document.querySelector('input[name="record_date"]');
+    if (recordDate) {
+        recordDate.value = today;
     }
 });
 

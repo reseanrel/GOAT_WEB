@@ -437,7 +437,7 @@ def register_pet():
 
         cursor.execute("""
             INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, available_for_adoption, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved')
         """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, available_for_adoption))
         db.commit()
 
@@ -467,11 +467,11 @@ def pet_details(pet_id):
         'address': session['user_address']
     }
 
-    # Get vaccinations from database
-    cursor.execute("SELECT * FROM vaccinations WHERE pet_id = %s ORDER BY date_administered DESC", (pet_id,))
-    pet_vaccinations = cursor.fetchall()
+    # Get medical records from database
+    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+    pet_medical_records = cursor.fetchall()
 
-    return render_template('user/pet_details.html', pet=pet, owner=owner_info, vaccinations=pet_vaccinations, datetime=datetime)
+    return render_template('user/pet_details.html', pet=pet, owner=owner_info, medical_records=pet_medical_records, datetime=datetime)
 
 @app.route('/user/update-pet-photo/<int:pet_id>', methods=['POST'])
 @login_required
@@ -544,9 +544,9 @@ def update_pet_photo(pet_id):
         db.rollback()
         return jsonify({'success': False, 'message': 'An error occurred while uploading the photo. Please try again.'})
 
-@app.route('/user/pet/<int:pet_id>/vaccinations')
+@app.route('/user/pet/<int:pet_id>/medical-records')
 @login_required
-def vaccination_records(pet_id):
+def medical_records(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
@@ -557,11 +557,30 @@ def vaccination_records(pet_id):
         flash('Access denied', 'error')
         return redirect(url_for('user_dashboard'))
 
-    # Get vaccinations from database
-    cursor.execute("SELECT * FROM vaccinations WHERE pet_id = %s ORDER BY date_administered DESC", (pet_id,))
-    pet_vaccinations = cursor.fetchall()
+    # Get medical records from database
+    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+    pet_medical_records = cursor.fetchall()
 
-    return render_template('user/vaccination.html', pet=pet, vaccinations=pet_vaccinations)
+    return render_template('user/medical_records.html', pet=pet, medical_records=pet_medical_records)
+
+@app.route('/user/pet/<int:pet_id>/vaccinations')
+@login_required
+def vaccinations(pet_id):
+    if session.get('is_admin'):
+        return redirect(url_for('admin_dashboard'))
+
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+    pet = cursor.fetchone()
+
+    if not pet:
+        flash('Access denied', 'error')
+        return redirect(url_for('user_dashboard'))
+
+    # Get vaccinations from database (stored in medical_records table with record_type = 'Vaccination')
+    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s AND record_type = 'Vaccination' ORDER BY record_date DESC", (pet_id,))
+    vaccinations = cursor.fetchall()
+
+    return render_template('user/vaccination.html', pet=pet, vaccinations=vaccinations)
 
 @app.route('/user/report-lost-pet/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1261,6 +1280,38 @@ def edit_pet(pet_id):
 @app.route('/user/add-vaccination/<int:pet_id>', methods=['POST'])
 @login_required
 def add_vaccination(pet_id):
+    if session.get('is_admin'):
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+    pet = cursor.fetchone()
+
+    if not pet:
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    # Get data from JSON request
+    data = request.get_json()
+    vaccine_name = (data.get('vaccine_name') or '').strip()
+    date_administered = (data.get('date_administered') or '').strip()
+    next_due_date = (data.get('next_due_date') or '').strip()
+    administered_by = (data.get('administered_by') or '').strip()
+    notes = (data.get('notes') or '').strip()
+
+    if not vaccine_name or not date_administered:
+        return jsonify({'success': False, 'message': 'Vaccine name and date are required'})
+
+    # Insert into medical_records table with record_type = vaccine name
+    cursor.execute("""
+        INSERT INTO medical_records (record_type, record_date, next_due_date, provider, description, pet_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by if administered_by else None, notes if notes else None, pet_id))
+    db.commit()
+
+    return jsonify({'success': True, 'message': 'Vaccination record added successfully'})
+
+@app.route('/user/add-medical-record/<int:pet_id>', methods=['POST'])
+@login_required
+def add_medical_record(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
 
