@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pila Pet Registration - Register, Manage, and Protect Your Pets</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+    body{
+        margin:0;
+        font-family:'Poppins', sans-serif;
+        background:#f5f7fa;
+    }
+    header{
+        background:white;
+        padding:15px 50px;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        box-shadow:0 2px 10px rgba(0,0,0,0.1);
+        position:sticky;
+        top:0;
+        z-index:100;
+    }
+    header .logo{
+        font-size:22px;
+        font-weight:700;
+        color:#2d89ff;
+    }
+    header nav a{
+        margin:0 15px;
+        text-decoration:none;
+        color:#333;
+        font-weight:500;
+    }
+    header .btn{
+        padding:10px 18px;
+        border:none;
+        border-radius:25px;
+        background:#2d89ff;
+        color:white;
+        cursor:pointer;
+        font-weight:600;
+    }
+
+    /* HERO SECTION */
+    .hero{
+        background:#9fb8c9;
+        padding:80px 50px;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        color:white;
+    }
+    .hero-text{
+        max-width:50%;
+    }
+    .hero-text h1{
+        font-size:40px;
+        font-weight:700;
+    }
+    .hero-text p{
+        margin:20px 0;
+        font-size:16px;
+        line-height:1.6;
+    }
+    .hero-text button{
+        padding:12px 22px;
+        border:none;
+        background:white;
+        color:#2d89ff;
+        font-weight:700;
+        border-radius:25px;
+        cursor:pointer;
+    }
+    .hero img{
+        width:300px;
+        border-radius:20px;
+        box-shadow:0 4px 15px rgba(0,0,0,0.2);
+    }
+
+    /* FEATURES */
+    .features{
+        text-align:center;
+        padding:60px 40px;
+    }
+    .features h2{
+        font-size:28px;
+        margin-bottom:10px;
+    }
+    .cards{
+        display:flex;
+        justify-content:center;
+        flex-wrap:wrap;
+        gap:20px;
+        margin-top:40px;
+    }
+    .card{
+        background:white;
+        width:220px;
+        padding:20px;
+        border-radius:15px;
+        box-shadow:0 3px 10px rgba(0,0,0,0.1);
+        text-align:center;
+    }
+    .card h3{
+        font-size:18px;
+        margin-bottom:10px;
+    }
+    .card p{
+        font-size:14px;
+        color:#666;
+    }
+
+    /* WHY IT MATTERS */
+    .matters{
+        background:#dcd2e8;
+        text-align:center;
+        padding:70px 40px;
+    }
+    .matters h2{
+        font-size:26px;
+        margin-bottom:10px;
+    }
+    .cards-why{
+        display:flex;
+        justify-content:center;
+        flex-wrap:wrap;
+        gap:25px;
+        margin-top:40px;
+    }
+    .card-why{
+        background:white;
+        width:260px;
+        padding:25px;
+        border-radius:20px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.1);
+        text-align:center;
+    }
+
+    /* FOOTER */
+    footer{
+        background:#1c1c1c;
+        color:white;
+        padding:40px 50px;
+        display:flex;
+        justify-content:space-between;
+        flex-wrap:wrap;
+    }
+    footer h3{
+        font-size:18px;
+    }
+    footer p, footer a{
+        color:#ccc;
+        font-size:14px;
+        text-decoration:none;
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <div class="logo">Pila Pet Registration</div>
+    <nav>
+        <a href="/">Home</a>
+        <a href="#features">Features</a>
+        <a href="#footer">Contact</a>
+    </nav>
+    <a href="/login" class="btn">Login</a>
+</header>
+
+<section class="hero">
+    <div class="hero-text">
+        <h1>Register, Manage, and Protect Your Pets</h1>
+        <p>Keep your pet records organized and secure. Stay updated with essential information for responsible pet ownership.</p>
+        <a href="/register"><button>Register Your Pet</button></a>
+    </div>
+    <img src="https://i.ibb.co/z645t1F/dog.jpg" alt="Dog">
+</section>
+
+<section id="features" class="features">
+    <h2>Everything You Need to Manage Your Pets</h2>
+    <p>Comprehensive tools for responsible pet ownership.</p>
+
+    <div class="cards">
+        <div class="card"><h3>Pet Profiles</h3><p>Store pet details easily.</p></div>
+        <div class="card"><h3>Medical Records</h3><p>Track vaccinations and checkups.</p></div>
+        <div class="card"><h3>Reminders</h3><p>Never miss important dates.</p></div>
+        <div class="card"><h3>Owner Info</h3><p>Keep contact details updated.</p></div>
+        <div class="card"><h3>Reports</h3><p>Generate needed documents.</p></div>
+        <div class="card"><h3>Monitoring</h3><p>Follow pet health progress.</p></div>
+    </div>
+</section>
+
+<section class="matters">
+    <h2>Why It Matters</h2>
+    <p>Helping pet owners stay informed and confident in caring for their pets.</p>
+
+    <div class="cards-why">
+        <div class="card-why"><h3>Pet Care Support</h3><p>Organized data helps ensure better decisions.</p></div>
+        <div class="card-why"><h3>Reliable Records</h3><p>Accurate info for vets and authorities.</p></div>
+        <div class="card-why"><h3>Easy Access</h3><p>Retrieve data anytime, anywhere.</p></div>
+    </div>
+</section>
+
+<footer id="footer">
+    <div>
+        <h3>Pila Pet Registration</h3>
+        <p>Making pet management simple.</p>
+    </div>
+    <div>
+        <h3>Links</h3>
+        <a href="/">Home</a><br>
+        <a href="#features">Features</a><br>
+        <a href="#footer">Contact</a>
+    </div>
+    <div>
+        <h3>Contact</h3>
+        <p>Email: support@pila.pets</p>
+    </div>
+</footer>
+
+</body>
+</html>

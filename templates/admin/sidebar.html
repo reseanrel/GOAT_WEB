@@ -19,11 +19,8 @@
         <a href="{{ url_for('admin_users') }}" class="nav-link {% if request.endpoint == 'admin_users' %}active{% endif %}">
             <i class="fas fa-users me-2"></i>Users
         </a>
-        <a href="{{ url_for('admin_archived_users') }}" class="nav-link {% if request.endpoint == 'admin_archived_users' %}active{% endif %}">
-            <i class="fas fa-archive me-2"></i>Archived Users
-        </a>
-        <a href="{{ url_for('admin_archived_pets') }}" class="nav-link {% if request.endpoint == 'admin_archived_pets' %}active{% endif %}">
-            <i class="fas fa-archive me-2"></i>Archived Pets
+        <a href="{{ url_for('admin_archived') }}" class="nav-link {% if request.endpoint == 'admin_archived' %}active{% endif %}">
+            <i class="fas fa-archive me-2"></i>Archived Records
         </a>
         <a href="#" onclick="confirmLogout()" class="nav-link">
             <i class="fas fa-sign-out-alt me-2"></i>Logout

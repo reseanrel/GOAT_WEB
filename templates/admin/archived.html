@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        {% include "admin/sidebar.html" %}
+
+        <!-- Main Content -->
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3>Archived Records</h3>
+                        <p class="text-muted mb-0">View and restore archived pets and users</p>
+                    </div>
+                    <div class="text-end">
+                        <h6 class="mb-0">{{ session.user_name }}</h6>
+                        <span class="badge bg-danger">Administrator</span>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <ul class="nav nav-tabs" id="archiveTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pets-tab" data-bs-toggle="tab" data-bs-target="#pets" type="button" role="tab" aria-controls="pets" aria-selected="true">
+                            <i class="fas fa-paw me-2"></i>Archived Pets
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="users-tab" data-bs-toggle="tab" data-bs-target="#users" type="button" role="tab" aria-controls="users" aria-selected="false">
+                            <i class="fas fa-users me-2"></i>Archived Users
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="archiveTabsContent">
+                    <!-- Pets Tab -->
+                    <div class="tab-pane fade show active" id="pets" role="tabpanel" aria-labelledby="pets-tab">
+                        <div class="mt-4">
+                            <!-- Filter Controls -->
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <div class="d-flex flex-wrap align-items-center gap-3">
+                                        <div class="flex-grow-1" style="min-width: 200px;">
+                                            <label for="statusFilter" class="form-label mb-1">Filter by Status</label>
+                                            <select class="form-select form-select-sm" id="statusFilter">
+                                                <option value="all">All Archived Pets</option>
+                                                <option value="safe">Safe Pets</option>
+                                                <option value="lost">Lost Pets</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex-grow-1" style="min-width: 200px;">
+                                            <label for="categoryFilter" class="form-label mb-1">Filter by Category</label>
+                                            <select class="form-select form-select-sm" id="categoryFilter">
+                                                <option value="all">All Categories</option>
+                                                <option value="Dog">Dogs</option>
+                                                <option value="Cat">Cats</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-secondary btn-sm" id="clearFiltersBtn">Clear Filters</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-body">
+                                    {% if pets %}
+                                        <div class="table-responsive">
+                                            <table class="table table-striped" id="petsTable">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ID</th>
+                                                        <th>Pet Name</th>
+                                                        <th>Category</th>
+                                                        <th>Type</th>
+                                                        <th>Age</th>
+                                                        <th>Gender</th>
+                                                        <th>Color</th>
+                                                        <th>Owner</th>
+                                                        <th>Contact</th>
+                                                        <th>Address</th>
+                                                        <th>Archived</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for pet in pets %}
+                                                    <tr class="pet-row" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
+                                                        <td>{{ pet.id }}</td>
+                                                        <td>
+                                                            <div class="d-flex align-items-center">
+                                                                {% if pet.photo_url %}
+                                                                <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="rounded me-2" style="width: 40px; height: 40px; object-fit: cover;">
+                                                                {% endif %}
+                                                                <div>
+                                                                    <strong>{{ pet.name }}</strong>
+                                                                    {% if pet.lost %}
+                                                                    <i class="fas fa-exclamation-triangle text-warning ms-1" title="Lost Pet"></i>
+                                                                    {% endif %}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td><span class="badge bg-primary">{{ pet.category }}</span></td>
+                                                        <td>{{ pet.pet_type or 'N/A' }}</td>
+                                                        <td>{{ pet.age }} years</td>
+                                                        <td>{{ pet.gender or 'N/A' }}</td>
+                                                        <td>{{ pet.color or 'N/A' }}</td>
+                                                        <td>{{ pet.owner_name }}</td>
+                                                        <td>{{ pet.owner_contact }}</td>
+                                                        <td>{{ pet.owner_address }}</td>
+                                                        <td>{{ pet.archived_at.strftime('%m/%d/%Y %H:%M') if pet.archived_at else 'N/A' }}</td>
+                                                        <td>
+                                                            {% if pet.lost %}
+                                                            <span class="badge bg-danger">
+                                                                <i class="fas fa-exclamation-triangle me-1"></i>Lost
+                                                            </span>
+                                                            {% else %}
+                                                            <span class="badge bg-success">
+                                                                <i class="fas fa-check me-1"></i>Safe
+                                                            </span>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>
+                                                            <div class="btn-group" role="group">
+                                                                <button class="btn btn-sm btn-outline-success restore-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" data-bs-toggle="modal" data-bs-target="#restorePetModal" title="Restore Pet">
+                                                                    <i class="fas fa-undo"></i>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-center py-5">
+                                            <i class="fas fa-paw fa-4x text-muted mb-3"></i>
+                                            <h5>No Archived Pets</h5>
+                                            <p class="text-muted">There are no archived pets in the system.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users Tab -->
+                    <div class="tab-pane fade" id="users" role="tabpanel" aria-labelledby="users-tab">
+                        <div class="mt-4">
+                            <!-- Search/Filter Controls -->
+                            <div class="card mb-4">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-6">
+                                            <h6 class="mb-0"><i class="fas fa-search me-2"></i>Search Archived Users</h6>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="d-flex gap-2 justify-content-end">
+                                                <input type="text" class="form-control form-control-sm" id="searchInput" placeholder="Search by name or email..." style="width: auto; min-width: 250px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-body">
+                                    {% if users %}
+                                        <div class="table-responsive">
+                                            <table class="table table-striped" id="usersTable">
+                                                <thead>
+                                                    <tr>
+                                                        <th>ID</th>
+                                                        <th>Name</th>
+                                                        <th>Email</th>
+                                                        <th>Age</th>
+                                                        <th>Contact</th>
+                                                        <th>Address</th>
+                                                        <th>Pets</th>
+                                                        <th>Archived</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for user in users %}
+                                                    <tr class="user-row">
+                                                        <td>{{ user.id }}</td>
+                                                        <td>
+                                                            <strong>{{ user.full_name }}</strong>
+                                                            {% if user.is_admin %}
+                                                            <i class="fas fa-crown text-warning ms-1" title="Administrator"></i>
+                                                            {% endif %}
+                                                        </td>
+                                                        <td>{{ user.email }}</td>
+                                                        <td>{{ user.age or 'N/A' }}</td>
+                                                        <td>{{ user.contact_number or 'N/A' }}</td>
+                                                        <td>{{ user.address or 'N/A' }}</td>
+                                                        <td>
+                                                            <span class="badge bg-info">{{ user.pet_count }}</span>
+                                                        </td>
+                                                        <td>{{ user.archived_at.strftime('%m/%d/%Y %H:%M') if user.archived_at else 'N/A' }}</td>
+                                                        <td>
+                                                            <div class="btn-group" role="group">
+                                                                <button class="btn btn-sm btn-outline-success restore-user-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.full_name }}" data-bs-toggle="modal" data-bs-target="#restoreUserModal" title="Restore User">
+                                                                    <i class="fas fa-undo"></i>
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-center py-5">
+                                            <i class="fas fa-users fa-4x text-muted mb-3"></i>
+                                            <h5>No Archived Users</h5>
+                                            <p class="text-muted">There are no archived users in the system.</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restore Pet Modal -->
+<div class="modal fade" id="restorePetModal" tabindex="-1" aria-labelledby="restorePetModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="restorePetModalLabel">Confirm Pet Restoration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to restore the pet "<span id="restorePetName"></span>"? This will make the pet visible in the active pets list again.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmRestorePetBtn">Restore</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Restore User Modal -->
+<div class="modal fade" id="restoreUserModal" tabindex="-1" aria-labelledby="restoreUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="restoreUserModalLabel">Confirm User Restoration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to restore user "<strong id="restoreUserName"></strong>"?</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Note:</strong> The user account will be restored and will appear in the active users list.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmRestoreUserBtn">Restore User</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    if (burgerMenu) {
+        burgerMenu.addEventListener('click', function() {
+            sidebar.classList.toggle('sidebar-open');
+        });
+    }
+
+    // Close sidebar on close button click
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', function() {
+            sidebar.classList.remove('sidebar-open');
+        });
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768 && sidebar) {
+            if (!sidebar.contains(event.target) && (!burgerMenu || !burgerMenu.contains(event.target))) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+
+    // Pets filtering
+    const statusFilter = document.getElementById('statusFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const petRows = document.querySelectorAll('.pet-row');
+
+    function filterPets() {
+        const statusValue = statusFilter.value;
+        const categoryValue = categoryFilter.value;
+
+        petRows.forEach(row => {
+            const status = row.getAttribute('data-status');
+            const category = row.getAttribute('data-category');
+
+            const statusMatch = statusValue === 'all' || status === statusValue;
+            const categoryMatch = categoryValue === 'all' || category === categoryValue;
+
+            if (statusMatch && categoryMatch) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (statusFilter) statusFilter.addEventListener('change', filterPets);
+    if (categoryFilter) categoryFilter.addEventListener('change', filterPets);
+
+    // Clear filters
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', function() {
+            if (statusFilter) statusFilter.value = 'all';
+            if (categoryFilter) categoryFilter.value = 'all';
+            filterPets();
+        });
+    }
+
+    // Users search
+    const searchInput = document.getElementById('searchInput');
+    const userRows = document.querySelectorAll('.user-row');
+
+    function filterUsers() {
+        const searchValue = searchInput.value.toLowerCase();
+
+        userRows.forEach(row => {
+            const name = row.cells[1].textContent.toLowerCase();
+            const email = row.cells[2].textContent.toLowerCase();
+
+            const searchMatch = name.includes(searchValue) || email.includes(searchValue);
+
+            if (searchMatch) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterUsers);
+
+    // Restore pet functionality
+    let petToRestore = null;
+
+    const restorePetButtons = document.querySelectorAll('.restore-pet-btn');
+
+    restorePetButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            petToRestore = {
+                id: this.getAttribute('data-pet-id'),
+                name: this.getAttribute('data-pet-name')
+            };
+            document.getElementById('restorePetName').textContent = petToRestore.name;
+        });
+    });
+
+    const confirmRestorePetBtn = document.getElementById('confirmRestorePetBtn');
+    if (confirmRestorePetBtn) {
+        confirmRestorePetBtn.addEventListener('click', function() {
+            if (!petToRestore) return;
+
+            fetch(`/admin/restore-pet/${petToRestore.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Close modal and reload page
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('restorePetModal'));
+                    modal.hide();
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while restoring the pet.');
+            });
+        });
+    }
+
+    // Restore user functionality
+    let userToRestore = null;
+    const restoreUserButtons = document.querySelectorAll('.restore-user-btn');
+    restoreUserButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            userToRestore = {
+                id: this.getAttribute('data-user-id'),
+                name: this.getAttribute('data-user-name')
+            };
+            document.getElementById('restoreUserName').textContent = userToRestore.name;
+        });
+    });
+
+    const confirmRestoreUserBtn = document.getElementById('confirmRestoreUserBtn');
+    if (confirmRestoreUserBtn) {
+        confirmRestoreUserBtn.addEventListener('click', function() {
+            if (!userToRestore) return;
+
+            fetch(`/admin/restore-user/${userToRestore.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while restoring the user');
+            });
+        });
+    }
+});
+
+function confirmLogout() {
+    var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+    logoutModal.show();
+}
+</script>
+{% endblock %}

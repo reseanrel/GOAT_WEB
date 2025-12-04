@@ -15,15 +15,29 @@ load_dotenv()
 
 
 # Database connection
-import mysql.connector
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",       # change if you use another username
-    password="mypassword",       # put your MySQL password here
-    database="pila_pets_db"
-)
-cursor = db.cursor(dictionary=True)
+# Get Supabase connection URL from environment
+database_url = os.getenv('DATABASE_URL')
+
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable is not set. Please add your Supabase connection URL to the .env file.")
+
+db = psycopg2.connect(database_url, sslmode='require')
+cursor = db.cursor(cursor_factory=RealDictCursor)
+
+# Ensure archived columns exist
+try:
+    cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+    cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+    cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+    cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+    db.commit()
+    print("Archive columns ensured")
+except Exception as e:
+    print(f"Could not add archive columns: {e}")
+    db.rollback()
 
 
 app = Flask(__name__)
@@ -128,17 +142,17 @@ def send_verification_email(user_email, verification_code):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Verification email sent FROM {app.config['MAIL_USERNAME']} TO {user_email}")
+        print(f"[SUCCESS] Verification email sent FROM {app.config['MAIL_USERNAME']} TO {user_email}")
         return True
 
     except Exception as e:
-        print(f"❌ Error sending email to {user_email}: {str(e)}")
+        print(f"[ERROR] Error sending email to {user_email}: {str(e)}")
         return False
 
 # Authentication Routes
 @app.route('/')
 def index():
-    return redirect(url_for('login'))
+    return render_template('landing.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -146,7 +160,7 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
 
-        # Fetch user from MySQL
+        # Fetch user from database
         cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
         user = cursor.fetchone()
 
@@ -163,7 +177,7 @@ def login():
             }
 
         if user and user['password'] == password:
-            # ✅ Save user info in session
+            # [SUCCESS] Save user info in session
             session['user_id'] = user['id']
             session['is_admin'] = user['is_admin']
             session['user_name'] = user['full_name']
@@ -219,7 +233,7 @@ def register():
             return render_template('auth/register.html')
 
         try:
-            # ✅ Check for duplicate email in the database
+            # [SUCCESS] Check for duplicate email in the database
             cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
             existing_user = cursor.fetchone()
             if existing_user:
@@ -237,7 +251,7 @@ def register():
                 'first_name': first_name,
                 'last_name': last_name,
                 'full_name': full_name,
-                'age': age,
+                'age': int(age) if age else None,
                 'contact_number': contact_number,
                 'address': address,
                 'email': email,
@@ -248,7 +262,7 @@ def register():
             # Send verification email using Gmail SMTP
             email_sent = send_verification_email(email, verification_code)
             if not email_sent:
-                print(f"🔑 FALLBACK: VERIFICATION CODE for {email}: {verification_code}")
+                print(f"[CODE] FALLBACK: VERIFICATION CODE for {email}: {verification_code}")
                 flash('Email service temporarily unavailable. Please check your email later or contact support.', 'warning')
                 # Don't return error - allow registration to continue for testing
 
@@ -256,7 +270,7 @@ def register():
             return redirect(url_for('verify_email'))
 
         except Exception as e:
-            print("❌ ERROR:", e)  # 👈 will show actual MySQL or logic error in the terminal
+            print("[ERROR] ERROR:", e)  # 👈 will show actual MySQL or logic error in the terminal
             flash('An error occurred during registration. Please try again.', 'error')
 
     return render_template('auth/register.html')
@@ -295,9 +309,9 @@ def verify_email():
                 return redirect(url_for('login'))
 
             except Exception as e:
-                print("❌ ERROR:", e)
+                print("[ERROR] ERROR:", e)
                 db.rollback()
-                flash('An error occurred during account creation. Please try again.', 'error')
+                flash(f'An error occurred during account creation: {str(e)}. Please try again.', 'error')
         else:
             flash('Invalid verification code. Please try again.', 'error')
 
@@ -320,10 +334,10 @@ def resend_verification():
     email_sent = send_verification_email(email, verification_code)
 
     if email_sent:
-        print("✅ Email resent successfully via Gmail SMTP")
+        print("[SUCCESS] Email resent successfully via Gmail SMTP")
         return jsonify({'success': True, 'message': 'Verification code resent successfully'})
     else:
-        print(f"🔑 FALLBACK: NEW VERIFICATION CODE for {email}: {verification_code}")
+        print(f"[CODE] FALLBACK: NEW VERIFICATION CODE for {email}: {verification_code}")
         # For development/testing, return success anyway
         return jsonify({'success': True, 'message': 'New verification code generated. Please check your email.'})
 
@@ -352,6 +366,10 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session or not session.get('is_admin'):
+            # Check if this is an AJAX request
+            if (request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
+                request.headers.get('Content-Type') in ['application/json', 'multipart/form-data']):
+                return jsonify({'success': False, 'message': 'Admin access required'})
             flash('Admin access required', 'error')
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -368,9 +386,8 @@ def get_user_by_id(user_id):
 def user_dashboard():
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
-    with db.cursor(dictionary=True) as cursor:
-        cursor.execute("SELECT * FROM pets WHERE owner_id = %s AND archived = FALSE AND status = 'approved'", (session['user_id'],))
-        user_pets = cursor.fetchall()
+    cursor.execute("SELECT * FROM pets WHERE owner_id = %s AND archived = FALSE AND status = 'approved'", (session['user_id'],))
+    user_pets = cursor.fetchall()
 
     return render_template('user/dashboard.html',
                           user_pets=user_pets,
@@ -398,7 +415,7 @@ def register_pet():
         age = request.form.get('age')
         color = request.form.get('color')
         gender = request.form.get('gender')
-        for_adoption = request.form.get('for_adoption') == 'on'
+        available_for_adoption = request.form.get('for_adoption') == 'on'
 
         if not name or not category:
             flash('Pet name and category are required', 'error')
@@ -419,9 +436,9 @@ def register_pet():
                 file.save(file_path)
 
         cursor.execute("""
-            INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, for_adoption, status)
+            INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, available_for_adoption, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-        """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, for_adoption))
+        """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, available_for_adoption))
         db.commit()
 
         flash(f'Pet "{name}" registered successfully and is pending admin approval!', 'success')
@@ -468,25 +485,25 @@ def update_pet_photo(pet_id):
         pet = cursor.fetchone()
 
         if not pet:
-            print(f"❌ Pet not found or access denied for pet_id: {pet_id}")
+            print(f"[ERROR] Pet not found or access denied for pet_id: {pet_id}")
             return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
-        print(f"✅ Pet found: {pet['name']}")
+        print(f"[SUCCESS] Pet found: {pet['name']}")
 
         # Handle file upload
         if 'pet_photo' not in request.files:
-            print("❌ No file part in request")
+            print("[ERROR] No file part in request")
             return jsonify({'success': False, 'message': 'No file provided'})
 
         file = request.files['pet_photo']
-        print(f"📁 File received: {file.filename if file else 'None'}")
+        print(f"[FILE] File received: {file.filename if file else 'None'}")
 
         if not file or file.filename == '':
-            print("❌ No file selected")
+            print("[ERROR] No file selected")
             return jsonify({'success': False, 'message': 'No file selected'})
 
         if not allowed_file(file.filename):
-            print(f"❌ Invalid file type: {file.filename}")
+            print(f"[ERROR] Invalid file type: {file.filename}")
             return jsonify({'success': False, 'message': 'Invalid file type. Please upload PNG, JPG, JPEG, or GIF files.'})
 
         # Generate unique filename
@@ -507,21 +524,21 @@ def update_pet_photo(pet_id):
 
         # Verify file was saved
         if not os.path.exists(file_path):
-            print(f"❌ File was not saved: {file_path}")
+            print(f"[ERROR] File was not saved: {file_path}")
             return jsonify({'success': False, 'message': 'Failed to save file'})
 
-        print(f"✅ File saved successfully: {photo_filename}")
+        print(f"[SUCCESS] File saved successfully: {photo_filename}")
 
         # Update pet photo in database
-        print(f"🗄️ Updating database for pet_id: {pet_id}")
+        print(f"[DB] Updating database for pet_id: {pet_id}")
         cursor.execute("UPDATE pets SET photo_url = %s WHERE id = %s", (photo_filename, pet_id))
         db.commit()
 
-        print(f"✅ Photo uploaded successfully: {photo_filename}")
+        print(f"[SUCCESS] Photo uploaded successfully: {photo_filename}")
         return jsonify({'success': True, 'message': 'Photo uploaded successfully', 'photo_filename': photo_filename})
 
     except Exception as e:
-        print(f"❌ Error uploading photo: {str(e)}")
+        print(f"[ERROR] Error uploading photo: {str(e)}")
         import traceback
         traceback.print_exc()
         db.rollback()
@@ -668,10 +685,10 @@ def report_lost_pet(pet_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Admin notification email sent for lost pet report: {pet_name}")
+        print(f"[SUCCESS] Admin notification email sent for lost pet report: {pet_name}")
 
     except Exception as e:
-        print(f"❌ Error sending admin notification email: {str(e)}")
+        print(f"[ERROR] Error sending admin notification email: {str(e)}")
 
     flash(f'Pet "{pet["name"]}" has been reported as lost.', 'success')
     return jsonify({'success': True, 'message': 'Pet reported as lost successfully', 'redirect_url': url_for('report_lost_confirmation', pet_id=pet_id)})
@@ -798,10 +815,10 @@ def mark_found_pet(pet_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Admin notification email sent for found pet report: {pet_name}")
+        print(f"[SUCCESS] Admin notification email sent for found pet report: {pet_name}")
 
     except Exception as e:
-        print(f"❌ Error sending admin notification email: {str(e)}")
+        print(f"[ERROR] Error sending admin notification email: {str(e)}")
 
     flash(f'Pet "{pet["name"]}" has been marked as found.', 'success')
     return jsonify({'success': True, 'message': 'Pet marked as found successfully'})
@@ -863,10 +880,10 @@ def adoption():
 
     cursor.execute("""
         SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
+                users.contact_number AS owner_contact, users.address AS owner_address
         FROM pets
         JOIN users ON pets.owner_id = users.id
-        WHERE pets.for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
+        WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
         ORDER BY pets.registered_on DESC
     """)
     adoption_pets = cursor.fetchall()
@@ -880,7 +897,7 @@ def express_adoption_interest(pet_id):
         return jsonify({'success': False, 'message': 'Access denied'})
 
     # Check if pet is available for adoption
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND for_adoption = TRUE AND lost = FALSE", (pet_id,))
+    cursor.execute("SELECT * FROM pets WHERE id = %s AND available_for_adoption = TRUE AND lost = FALSE", (pet_id,))
     pet = cursor.fetchone()
 
     if not pet:
@@ -1011,10 +1028,10 @@ def express_adoption_interest(pet_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Adoption interest notification sent to {owner['email']} for pet {pet['name']}")
+        print(f"[SUCCESS] Adoption interest notification sent to {owner['email']} for pet {pet['name']}")
 
     except Exception as e:
-        print(f"❌ Error sending adoption interest email: {str(e)}")
+        print(f"[ERROR] Error sending adoption interest email: {str(e)}")
 
     return jsonify({'success': True, 'message': 'Interest submitted successfully'})
 
@@ -1114,10 +1131,10 @@ def add_comment(pet_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Admin notification email sent for comment on pet {pet_name}")
+        print(f"[SUCCESS] Admin notification email sent for comment on pet {pet_name}")
 
     except Exception as e:
-        print(f"❌ Error sending admin notification email: {str(e)}")
+        print(f"[ERROR] Error sending admin notification email: {str(e)}")
 
     return jsonify({'success': True, 'message': 'Comment added successfully'})
 
@@ -1168,7 +1185,7 @@ def edit_profile():
             return redirect(url_for('user_dashboard'))
 
         except Exception as e:
-            print("❌ ERROR:", e)
+            print("[ERROR] ERROR:", e)
             db.rollback()
             flash('An error occurred while updating your profile. Please try again.', 'error')
 
@@ -1198,7 +1215,7 @@ def edit_pet(pet_id):
         age = request.form.get('age')
         color = request.form.get('color')
         gender = request.form.get('gender')
-        for_adoption = request.form.get('for_adoption') == 'on'
+        available_for_adoption = request.form.get('for_adoption') == 'on'
 
         if not name or not category:
             flash('Pet name and category are required', 'error')
@@ -1226,16 +1243,16 @@ def edit_pet(pet_id):
         try:
             cursor.execute("""
                 UPDATE pets
-                SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, for_adoption = %s, photo_url = %s
+                SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, available_for_adoption = %s, photo_url = %s
                 WHERE id = %s AND owner_id = %s
-            """, (name, category, pet_type, age, color, gender, for_adoption, photo_filename, pet_id, session['user_id']))
+            """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_filename, pet_id, session['user_id']))
             db.commit()
 
             flash(f'Pet "{name}" updated successfully!', 'success')
             return redirect(url_for('pet_details', pet_id=pet_id))
 
         except Exception as e:
-            print("❌ ERROR:", e)
+            print("[ERROR] ERROR:", e)
             db.rollback()
             flash('An error occurred while updating the pet. Please try again.', 'error')
 
@@ -1287,12 +1304,12 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) AS total FROM comments WHERE pet_id IN (SELECT id FROM pets WHERE archived = FALSE)")
     new_comments_count = cursor.fetchone()['total']
 
-    # Get recent non-archived pets with owner information
+    # Get recent non-archived approved pets with owner information
     cursor.execute("""
     SELECT pets.*, users.full_name AS owner_name
     FROM pets
     JOIN users ON users.id = pets.owner_id
-    WHERE pets.archived = FALSE
+    WHERE pets.archived = FALSE AND pets.status = 'approved'
     ORDER BY pets.registered_on DESC
     LIMIT 5
 """)
@@ -1309,13 +1326,13 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_pets():
-    # Get all non-archived pets with owner information
+    # Get all non-archived approved pets with owner information
     cursor.execute("""
         SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
             users.contact_number AS owner_contact, users.address AS owner_address
         FROM pets
         JOIN users ON pets.owner_id = users.id
-        WHERE pets.archived = FALSE
+        WHERE pets.archived = FALSE AND pets.status = 'approved'
     """)
     pets_with_owners = cursor.fetchall()
 
@@ -1424,10 +1441,10 @@ def deactivate_user(user_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Account {action} notification sent to {user['email']}")
+        print(f"[SUCCESS] Account {action} notification sent to {user['email']}")
 
     except Exception as e:
-        print(f"❌ Error sending notification email: {str(e)}")
+        print(f"[ERROR] Error sending notification email: {str(e)}")
 
     flash(f'User "{user["full_name"]}" {action} successfully', 'success')
     return jsonify({'success': True, 'message': f'User {action} successfully'})
@@ -1437,25 +1454,30 @@ def deactivate_user(user_id):
 @login_required
 @admin_required
 def archive_pet(pet_id):
-    # Get pet data with owner information
-    cursor.execute("""
-        SELECT pets.*, users.email AS owner_email, users.full_name AS owner_name
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.id = %s
-    """, (pet_id,))
-    pet = cursor.fetchone()
+    try:
+        # Get pet data with owner information
+        cursor.execute("""
+            SELECT pets.*, users.email AS owner_email, users.full_name AS owner_name
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.id = %s
+        """, (pet_id,))
+        pet = cursor.fetchone()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found'})
+        if not pet:
+            return jsonify({'success': False, 'message': 'Pet not found'})
 
-    pet_name = pet['name']
-    owner_email = pet['owner_email']
-    owner_name = pet['owner_name']
+        pet_name = pet['name']
+        owner_email = pet['owner_email']
+        owner_name = pet['owner_name']
 
-    # Archive pet and set archived timestamp
-    cursor.execute("UPDATE pets SET archived = TRUE, archived_at = NOW() WHERE id = %s", (pet_id,))
-    db.commit()
+        # Archive pet and set archived timestamp
+        cursor.execute("UPDATE pets SET archived = TRUE, archived_at = NOW() WHERE id = %s", (pet_id,))
+        db.commit()
+    except Exception as e:
+        print(f"Error archiving pet: {e}")
+        db.rollback()
+        return jsonify({'success': False, 'message': f'Database error: {str(e)}'})
 
     # Send email notification to pet owner
     try:
@@ -1520,9 +1542,9 @@ def archive_pet(pet_id):
         server.send_message(msg)
         server.quit()
 
-        print(f"✅ Pet archive notification email sent to {owner_email} for pet {pet_name}")
+        print(f"[SUCCESS] Pet archive notification email sent to {owner_email} for pet {pet_name}")
     except Exception as e:
-        print(f"❌ Failed to send pet archive email: {e}")
+        print(f"[ERROR] Failed to send pet archive email: {e}")
 
     flash(f'Pet "{pet_name}" archived successfully', 'success')
     return jsonify({'success': True, 'message': 'Pet archived successfully'})
@@ -1557,22 +1579,27 @@ def bulk_update_pets():
 @login_required
 @admin_required
 def archive_user(user_id):
-    # Get user data
-    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
+    try:
+        # Get user data
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
 
-    if not user:
-        return jsonify({'success': False, 'message': 'User not found'})
+        if not user:
+            return jsonify({'success': False, 'message': 'User not found'})
 
-    if user['is_admin']:
-        return jsonify({'success': False, 'message': 'Cannot archive admin user'})
+        if user['is_admin']:
+            return jsonify({'success': False, 'message': 'Cannot archive admin user'})
 
-    # Archive user and set archived timestamp
-    cursor.execute("UPDATE users SET archived = TRUE, archived_at = NOW() WHERE id = %s", (user_id,))
-    db.commit()
+        # Archive user and set archived timestamp
+        cursor.execute("UPDATE users SET archived = TRUE, archived_at = NOW() WHERE id = %s", (user_id,))
+        db.commit()
 
-    flash(f'User "{user["full_name"]}" has been archived successfully', 'success')
-    return jsonify({'success': True, 'message': 'User archived successfully'})
+        flash(f'User "{user["full_name"]}" has been archived successfully', 'success')
+        return jsonify({'success': True, 'message': 'User archived successfully'})
+    except Exception as e:
+        print(f"Error archiving user: {e}")
+        db.rollback()
+        return jsonify({'success': False, 'message': f'Database error: {str(e)}'})
 
 @app.route('/admin/archived-users')
 @login_required
@@ -1590,6 +1617,34 @@ def admin_archived_users():
     archived_users = cursor.fetchall()
 
     return render_template('admin/archived_users.html', users=archived_users)
+
+@app.route('/admin/archived')
+@login_required
+@admin_required
+def admin_archived():
+    # Get all archived pets with owner information
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+            users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.archived = TRUE
+        ORDER BY pets.archived_at DESC
+    """)
+    archived_pets = cursor.fetchall()
+
+    # Get all archived users with pet count
+    cursor.execute("""
+        SELECT users.*, COUNT(pets.id) AS pet_count
+        FROM users
+        LEFT JOIN pets ON users.id = pets.owner_id
+        WHERE users.archived = TRUE
+        GROUP BY users.id
+        ORDER BY users.archived_at DESC
+    """)
+    archived_users = cursor.fetchall()
+
+    return render_template('admin/archived.html', pets=archived_pets, users=archived_users)
 
 @app.route('/admin/archived-pets')
 @login_required
@@ -1676,7 +1731,7 @@ def admin_lost_pets():
     # Get recent reports (last 7 days)
     cursor.execute("""
         SELECT COUNT(*) AS total FROM pets
-        WHERE lost = TRUE AND archived = FALSE AND registered_on >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE lost = TRUE AND archived = FALSE AND registered_on >= NOW() - INTERVAL '7 days'
     """)
     recent_reports = cursor.fetchone()['total']
 
@@ -1775,9 +1830,9 @@ def mark_pet_found(pet_id):
             server.send_message(msg)
             server.quit()
 
-            print(f"✅ Found pet notification email sent to {owner_email}")
+            print(f"[SUCCESS] Found pet notification email sent to {owner_email}")
         except Exception as e:
-            print(f"❌ Failed to send found pet email: {e}")
+            print(f"[ERROR] Failed to send found pet email: {e}")
 
         # Add admin note as comment if provided
         if note:
@@ -1891,9 +1946,9 @@ def admin_reply_to_lost_pet(pet_id):
             server.send_message(msg)
             server.quit()
 
-            print(f"✅ Admin reply notification email sent to {owner_email}")
+            print(f"[SUCCESS] Admin reply notification email sent to {owner_email}")
         except Exception as e:
-            print(f"❌ Failed to send admin reply email: {e}")
+            print(f"[ERROR] Failed to send admin reply email: {e}")
 
     return jsonify({'success': True})
 
@@ -2015,9 +2070,9 @@ def approve_pet(pet_id):
             server.send_message(msg)
             server.quit()
 
-            print(f"✅ Pet approval notification email sent to {owner['email']}")
+            print(f"[SUCCESS] Pet approval notification email sent to {owner['email']}")
         except Exception as e:
-            print(f"❌ Failed to send pet approval email: {e}")
+            print(f"[ERROR] Failed to send pet approval email: {e}")
 
     flash(f'Pet "{pet["name"]}" has been approved successfully', 'success')
     return jsonify({'success': True, 'message': 'Pet approved successfully'})
@@ -2118,9 +2173,9 @@ def reject_pet(pet_id):
             server.send_message(msg)
             server.quit()
 
-            print(f"✅ Pet rejection notification email sent to {owner['email']}")
+            print(f"[SUCCESS] Pet rejection notification email sent to {owner['email']}")
         except Exception as e:
-            print(f"❌ Failed to send pet rejection email: {e}")
+            print(f"[ERROR] Failed to send pet rejection email: {e}")
 
     flash(f'Pet "{pet["name"]}" has been rejected', 'warning')
     return jsonify({'success': True, 'message': 'Pet rejected successfully'})

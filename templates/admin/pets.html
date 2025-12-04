@@ -83,8 +83,8 @@
                                             <td>{{ pet.id }}</td>
                                             <td>
                                                 <div class="d-flex align-items-center">
-                                                    {% if pet.photo %}
-                                                    <img src="{{ url_for('static', filename='uploads/' + pet.photo) }}" alt="{{ pet.name }}" class="rounded me-2" style="width: 40px; height: 40px; object-fit: cover;">
+                                                    {% if pet.photo_url %}
+                                                    <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="rounded me-2" style="width: 40px; height: 40px; object-fit: cover;">
                                                     {% endif %}
                                                     <div>
                                                         <strong>{{ pet.name }}</strong>
@@ -116,7 +116,7 @@
                                             </td>
                                             <td>
                                                 <div class="btn-group" role="group">
-                                                    <button class="btn btn-sm btn-outline-warning archive-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" data-bs-toggle="modal" data-bs-target="#archivePetModal" title="Archive Pet">
+                                                    <button class="btn btn-sm btn-outline-warning archive-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" title="Archive Pet">
                                                         <i class="fas fa-archive"></i>
                                                     </button>
                                                 </div>
@@ -174,14 +174,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const sidebar = document.getElementById('sidebar');
 
     // Toggle sidebar on burger menu click
-    burgerMenu.addEventListener('click', function() {
-        sidebar.classList.toggle('sidebar-open');
-    });
+    if (burgerMenu) {
+        burgerMenu.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.toggle('sidebar-open');
+        });
+    }
 
     // Close sidebar on close button click
-    closeSidebar.addEventListener('click', function() {
-        sidebar.classList.remove('sidebar-open');
-    });
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.remove('sidebar-open');
+        });
+    }
 
     // Close sidebar when clicking outside on mobile
     document.addEventListener('click', function(event) {
@@ -197,6 +201,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const petRows = document.querySelectorAll('.pet-row');
 
     function filterPets() {
+        if (!statusFilter || !categoryFilter) return;
+
         const statusValue = statusFilter.value;
         const categoryValue = categoryFilter.value;
 
@@ -215,8 +221,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    statusFilter.addEventListener('change', filterPets);
-    categoryFilter.addEventListener('change', filterPets);
+    if (statusFilter) statusFilter.addEventListener('change', filterPets);
+    if (categoryFilter) categoryFilter.addEventListener('change', filterPets);
 
     // Select all checkbox functionality
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -241,6 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let petToArchive = null;
 
     const archiveButtons = document.querySelectorAll('.archive-pet-btn');
+
     archiveButtons.forEach(button => {
         button.addEventListener('click', function() {
             petToArchive = {
@@ -248,12 +255,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 name: this.getAttribute('data-pet-name')
             };
             document.getElementById('archivePetName').textContent = petToArchive.name;
+
+            // Manually show the modal
+            const modal = new bootstrap.Modal(document.getElementById('archivePetModal'));
+            modal.show();
         });
     });
 
     // Confirm archive button in modal
-    document.getElementById('confirmArchiveBtn').addEventListener('click', function() {
-        if (!petToArchive) return;
+    const confirmBtn = document.getElementById('confirmArchiveBtn');
+
+    confirmBtn.addEventListener('click', function() {
+        if (!petToArchive) {
+            return;
+        }
 
         fetch(`/admin/archive-pet/${petToArchive.id}`, {
             method: 'POST',

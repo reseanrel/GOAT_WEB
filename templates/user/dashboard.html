@@ -39,14 +39,9 @@
 
                 <!-- My Pets -->
                 <div class="card" style="margin: 0 2rem 2rem 2rem;">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0"><i class="fas fa-paw me-2"></i>Your Pets</h5>
-                            <p class="text-muted mb-0">Manage your pet registrations and vaccination records</p>
-                        </div>
-                        <a href="{{ url_for('register_pet') }}" class="btn btn-success">
-                            <i class="fas fa-plus me-2"></i>Add New Pet
-                        </a>
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-paw me-2"></i>Your Pets</h5>
+                        <p class="text-muted mb-0">Manage your pet registrations and vaccination records</p>
                     </div>
                     <div class="card-body">
                         {% if user_pets %}
@@ -93,10 +88,7 @@
                             <div class="text-center py-5">
                                 <i class="fas fa-paw fa-4x text-muted mb-3"></i>
                                 <h5>No Pets Registered</h5>
-                                <p class="text-muted mb-4">You haven't registered any pets yet. Start by adding your first pet!</p>
-                                <a href="{{ url_for('register_pet') }}" class="btn btn-success btn-lg">
-                                    <i class="fas fa-plus me-2"></i>Register Your First Pet
-                                </a>
+                                <p class="text-muted">You haven't registered any pets yet. Use the Quick Actions section above to register your first pet!</p>
                             </div>
                         {% endif %}
                     </div>
