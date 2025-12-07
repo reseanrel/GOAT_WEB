@@ -159,7 +159,6 @@ body {
     /* Flex layout for equal height cards */
     display: flex;
     flex-direction: column;
-    height: 100%;
 }
 
 .pet-card:hover {
@@ -264,19 +263,29 @@ h2 {
 }
 
 .pet-container {
-    display: flex;
-    gap: 30px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 15px;
     margin-top: 20px;
-    flex-wrap: wrap;
+    width: 100%;
+    padding: 0 15px;
+    box-sizing: border-box;
 }
 
 .pet-card {
-    width: 260px;
+    display: flex;
+    flex-direction: column;
     background: white;
     border-radius: 15px;
     overflow: hidden;
     box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
     transition: transform 0.3s;
+    width: 100%;
+}
+
+.admin-pet-card {
+    min-height: 580px;
+    height: 580px;
 }
 
 .pet-card:hover {
@@ -308,9 +317,18 @@ h2 {
 .tag-lost { background: #dc2626; padding: 3px 8px; border-radius: 4px; }
 .tag-safe { background: var(--secondary-color); padding: 3px 8px; border-radius: 4px; }
 .tag-available { background: #059669; padding: 3px 8px; border-radius: 4px; }
+.tag-own { background: #10b981; padding: 3px 8px; border-radius: 4px; }
 
 .details {
     padding: 15px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.details-content {
+    flex: 1;
 }
 
 .details p {
@@ -324,6 +342,15 @@ h2 {
     font-size: 18px;
     margin-bottom: 10px;
     color: var(--dark-color);
+}
+
+.admin-actions {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 5px;
+    justify-content: center;
 }
 
 .details-btn {
@@ -344,10 +371,135 @@ h2 {
     transform: translateY(-2px);
 }
 
+/* Responsive grid for different screen sizes */
+@media (max-width: 1400px) {
+    .pet-container {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+    }
+
+    .admin-pet-card {
+        min-height: 560px;
+        height: 560px;
+    }
+}
+
+@media (max-width: 1100px) {
+    .pet-container {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+
+    .admin-pet-card {
+        min-height: 540px;
+        height: 540px;
+    }
+}
+
+@media (max-width: 768px) {
+    .pet-container {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        padding: 0 10px;
+    }
+
+    .admin-pet-card {
+        min-height: 520px;
+        height: 520px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pet-container {
+        grid-template-columns: repeat(1, 1fr);
+        gap: 10px;
+        padding: 0 5px;
+    }
+
+    .admin-pet-card {
+        min-height: 500px;
+        height: 500px;
+    }
+
+    .pet-img {
+        height: 200px;
+    }
+
+    .details {
+        padding: 15px;
+    }
+
+    .pet-name {
+        font-size: 16px;
+    }
+
+    .details p {
+        font-size: 13px;
+    }
+}
+
+/* No pending approvals message styling */
+.no-pending-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+/* No adoption pets message styling */
+.no-adoption-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
+/* No lost pets message styling */
+.no-lost-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+}
+
 /* Lost Pets specific layout */
 .lost-pets-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 30px;
+    grid-template-columns: repeat(auto-fill, 260px);
+    gap: 20px;
     margin-top: 20px;
+}
+
+.lost-pets-container .pet-card {
+    min-height: 650px;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+
+.lost-pets-container .pet-card .details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.lost-pets-container .pet-card .details-content {
+    flex: 1;
+}
+
+.lost-pets-container .pet-card .comments-section {
+    min-height: 120px;
+    margin-top: auto;
 }

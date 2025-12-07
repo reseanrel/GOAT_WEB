@@ -51,7 +51,7 @@
            {% for pet in user_pets %}
        <div class="pet-card">
            {% if pet.photo_url %}
-           <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
+           <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="pet-img">
            {% else %}
            <img src="https://via.placeholder.com/260x200" class="pet-img">
            {% endif %}
@@ -62,6 +62,12 @@
                <span class="tag-cat">Cat</span>
                {% else %}
                <span class="tag-other">{{ pet.category }}</span>
+               {% endif %}
+               {% if pet.available_for_adoption %}
+               <span class="tag-available">Available for Adoption</span>
+               {% endif %}
+               {% if pet.lost %}
+               <span class="tag-lost">Lost</span>
                {% endif %}
                {% if pet.status == 'approved' %}
                <span class="tag-approved">Approved</span>

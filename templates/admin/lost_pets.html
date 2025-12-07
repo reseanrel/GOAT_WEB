@@ -49,45 +49,85 @@
                     </div>
                 </div>
 
-<div class="pet-container">
-   {% if lost_pets %}
-       {% for pet in lost_pets %}
-   <div class="pet-card admin-pet-card" data-status="lost" data-category="{{ pet.category }}">
-       {% if pet.photo_url %}
-       <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
-       {% else %}
-       <img src="https://via.placeholder.com/260x200" class="pet-img">
-       {% endif %}
-       <div class="tag-bar">
-           {% if pet.category == 'Dog' %}
-           <span class="tag-dog">Dog</span>
-           {% elif pet.category == 'Cat' %}
-           <span class="tag-cat">Cat</span>
-           {% else %}
-           <span class="tag-other">{{ pet.category }}</span>
-           {% endif %}
-           <span class="tag-lost">Lost</span>
-       </div>
-       <div class="details">
-           <div class="pet-name">{{ pet.name }}</div>
-           <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
-           <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
-           <p><strong>Age:</strong> {{ pet.age }} years</p>
-           <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
-           <p><strong>Owner:</strong> {{ pet.owner_name }}</p>
-           <p><strong>Contact:</strong> {{ pet.owner_contact or 'Not provided' }}</p>
-           <p><strong>Reported:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
+                <!-- Filter Controls -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-center gap-3">
+                            <div class="flex-grow-1" style="min-width: 200px;">
+                                <label for="statusFilter" class="form-label mb-1">Filter by Status</label>
+                                <select class="form-select form-select-sm" id="statusFilter">
+                                    <option value="all">All Lost Pets</option>
+                                    <option value="lost">Lost Pets</option>
+                                </select>
+                            </div>
+                            <div class="flex-grow-1" style="min-width: 200px;">
+                                <label for="categoryFilter" class="form-label mb-1">Filter by Category</label>
+                                <select class="form-select form-select-sm" id="categoryFilter">
+                                    <option value="all">All Categories</option>
+                                    <option value="Dog">Dogs</option>
+                                    <option value="Cat">Cats</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn btn-secondary btn-sm" id="clearFiltersBtn">Clear Filters</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-       </div>
-   </div>
-       {% endfor %}
-   {% else %}
-       <div class="text-center py-5" style="width: 100%;">
-           <i class="fas fa-heart fa-4x text-success mb-3"></i>
-           <h5>No Lost Pets</h5>
-           <p class="text-muted">Great news! There are currently no active lost pet reports.</p>
-       </div>
-   {% endif %}
+<div class="pet-container">
+    {% if lost_pets %}
+        {% for pet in lost_pets %}
+    <div class="pet-card admin-pet-card" data-status="lost" data-category="{{ pet.category }}">
+        {% if pet.photo_url %}
+        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
+        {% else %}
+        <img src="https://via.placeholder.com/260x200" class="pet-img">
+        {% endif %}
+        <div class="tag-bar">
+            {% if pet.category == 'Dog' %}
+            <span class="tag-dog">Dog</span>
+            {% elif pet.category == 'Cat' %}
+            <span class="tag-cat">Cat</span>
+            {% else %}
+            <span class="tag-other">{{ pet.category }}</span>
+            {% endif %}
+            <span class="tag-lost">Lost</span>
+        </div>
+        <div class="details">
+            <div class="details-content">
+                <div class="pet-name">{{ pet.name }}</div>
+                <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
+                <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
+                <p><strong>Age:</strong> {{ pet.age }} years</p>
+                <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
+                <p><strong>Owner:</strong> {{ pet.owner_name }}</p>
+                <p><strong>Contact:</strong> {{ pet.owner_contact or 'Not provided' }}</p>
+                <p><strong>Reported:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
+            </div>
+
+            <div class="admin-actions">
+                <a href="{{ url_for('admin_pet_medical_records', pet_id=pet.id) }}" class="btn btn-sm btn-outline-info me-1" title="View Medical Records">
+                    <i class="fas fa-eye"></i>
+                </a>
+                <button class="btn btn-sm btn-outline-success me-1" onclick="markFound({{ pet.id }}, '{{ pet.name }}')" title="Mark as Found">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="adminReply({{ pet.id }}, '{{ pet.name }}')" title="Admin Reply">
+                    <i class="fas fa-reply"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+        {% endfor %}
+    {% else %}
+        <div class="no-lost-message">
+            <i class="fas fa-heart fa-4x text-success mb-3"></i>
+            <h5>No Lost Pets</h5>
+            <p class="text-muted">Great news! There are currently no active lost pet reports.</p>
+        </div>
+    {% endif %}
 </div>
             </div>
         </div>
@@ -101,6 +141,271 @@
 function confirmLogout() {
     var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
     logoutModal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    if (burgerMenu) {
+        burgerMenu.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.toggle('sidebar-open');
+        });
+    }
+
+    // Close sidebar on close button click
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.remove('sidebar-open');
+        });
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+
+    const statusFilter = document.getElementById('statusFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+    const petCards = document.querySelectorAll('.admin-pet-card');
+
+    function filterPets() {
+        if (!statusFilter || !categoryFilter) return;
+
+        const statusValue = statusFilter.value;
+        const categoryValue = categoryFilter.value;
+
+        petCards.forEach(card => {
+            const status = card.getAttribute('data-status');
+            const category = card.getAttribute('data-category');
+
+            const statusMatch = statusValue === 'all' || status === statusValue;
+            const categoryMatch = categoryValue === 'all' || category === categoryValue;
+
+            if (statusMatch && categoryMatch) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    function clearFilters() {
+        if (statusFilter) statusFilter.value = 'all';
+        if (categoryFilter) categoryFilter.value = 'all';
+        filterPets();
+    }
+
+    if (statusFilter) statusFilter.addEventListener('change', filterPets);
+    if (categoryFilter) categoryFilter.addEventListener('change', filterPets);
+    if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearFilters);
+});
+
+function markFound(petId, petName) {
+    if (!confirm(`Are you sure you want to mark "${petName}" as found?`)) {
+        return;
+    }
+
+    // Show loading state
+    const buttons = document.querySelectorAll(`button[onclick*="${petId}"]`);
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    });
+
+    fetch(`/admin/mark-pet-found/${petId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            note: 'Pet marked as found by admin'
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', `Pet "${petName}" has been marked as found!`);
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showToast('error', data.message);
+            // Re-enable buttons
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = btn.onclick.toString().includes('markFound') ?
+                    '<i class="fas fa-check"></i>' :
+                    '<i class="fas fa-reply"></i>';
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'An error occurred. Please try again.');
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.onclick.toString().includes('markFound') ?
+                '<i class="fas fa-check"></i>' :
+                '<i class="fas fa-reply"></i>';
+        });
+    });
+}
+
+let currentReplyPetId = null;
+let currentReplyPetName = null;
+
+function adminReply(petId, petName) {
+    currentReplyPetId = petId;
+    currentReplyPetName = petName;
+
+    // Create modal for admin reply
+    const modalHtml = `
+        <div class="modal fade" id="adminReplyModal" tabindex="-1" aria-labelledby="adminReplyModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="adminReplyModalLabel">Admin Reply for ${petName}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="adminReplyText" class="form-label">Your Reply <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="adminReplyText" rows="4" placeholder="Enter your reply to the lost pet report..."></textarea>
+                            <div class="invalid-feedback">
+                                Please provide a reply.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="submitAdminReplyBtn">Send Reply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if present
+    const existingModal = document.getElementById('adminReplyModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('adminReplyModal'));
+    modal.show();
+
+    // Add event listener for submit button
+    document.getElementById('submitAdminReplyBtn').addEventListener('click', function() {
+        submitAdminReply();
+    });
+}
+
+function submitAdminReply() {
+    const replyText = document.getElementById('adminReplyText').value.trim();
+
+    if (!replyText) {
+        document.getElementById('adminReplyText').classList.add('is-invalid');
+        return;
+    }
+
+    // Hide modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('adminReplyModal'));
+    modal.hide();
+
+    // Show loading state
+    const buttons = document.querySelectorAll(`button[onclick*="${currentReplyPetId}"]`);
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    });
+
+    // Create form data
+    const formData = new FormData();
+    formData.append('reply', replyText);
+
+    fetch(`/admin/lost-pet/${currentReplyPetId}/reply`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', `Reply sent for "${currentReplyPetName}"!`);
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            showToast('error', data.message);
+            // Re-enable buttons
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = btn.onclick.toString().includes('markFound') ?
+                    '<i class="fas fa-check"></i>' :
+                    '<i class="fas fa-reply"></i>';
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('error', 'An error occurred. Please try again.');
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.onclick.toString().includes('markFound') ?
+                '<i class="fas fa-check"></i>' :
+                '<i class="fas fa-reply"></i>';
+        });
+    });
+}
+
+function showToast(type, message) {
+    // Create toast notification
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'} me-2"></i>
+                    <span>${message}</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+
+    // Create toast container if it doesn't exist
+    let toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(toastContainer);
+    }
+
+    // Add toast to container
+    const toastElement = document.createElement('div');
+    toastElement.innerHTML = toastHtml;
+    toastContainer.appendChild(toastElement);
+
+    // Show toast
+    const toast = new bootstrap.Toast(toastElement.querySelector('.toast'));
+    toast.show();
+
+    // Remove toast after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
 }
 </script>
 {% endblock %}

@@ -15,7 +15,8 @@ conn = psycopg2.connect(database_url)
 cursor = conn.cursor()
 
 # Read and execute SQL file
-sql_file = 'update_vaccinations_to_medical_records.sql'
+import sys
+sql_file = sys.argv[1] if len(sys.argv) > 1 else 'update_vaccinations_to_medical_records.sql'
 with open(sql_file, 'r') as file:
     sql_script = file.read()
 

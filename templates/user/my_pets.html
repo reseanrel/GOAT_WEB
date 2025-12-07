@@ -26,7 +26,7 @@
        {% for pet in pets %}
    <div class="pet-card">
        {% if pet.photo_url %}
-       <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
+       <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
        {% else %}
        <img src="https://via.placeholder.com/260x200" class="pet-img">
        {% endif %}

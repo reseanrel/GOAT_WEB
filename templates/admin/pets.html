@@ -58,7 +58,7 @@
         {% for pet in pets %}
     <div class="pet-card admin-pet-card" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
         {% if pet.photo_url %}
-        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-img">
+        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
         {% else %}
         <img src="https://via.placeholder.com/260x200" class="pet-img">
         {% endif %}
@@ -70,6 +70,9 @@
             {% else %}
             <span class="tag-other">{{ pet.category }}</span>
             {% endif %}
+            {% if pet.available_for_adoption %}
+            <span class="tag-available">Available for Adoption</span>
+            {% endif %}
             {% if pet.lost %}
             <span class="tag-lost">Lost</span>
             {% else %}
@@ -77,14 +80,16 @@
             {% endif %}
         </div>
         <div class="details">
-            <div class="pet-name">{{ pet.name }}</div>
-            <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
-            <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
-            <p><strong>Age:</strong> {{ pet.age }} years</p>
-            <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
-            <p><strong>Owner:</strong> {{ pet.owner_name }}</p>
-            <p><strong>Contact:</strong> {{ pet.owner_contact or 'Not provided' }}</p>
-            <p><strong>Registered:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
+            <div class="details-content">
+                <div class="pet-name">{{ pet.name }}</div>
+                <p><strong>Breed:</strong> {{ pet.pet_type or 'Not specified' }}</p>
+                <p><strong>Gender:</strong> {{ pet.gender or 'Not specified' }}</p>
+                <p><strong>Age:</strong> {{ pet.age }} years</p>
+                <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
+                <p><strong>Owner:</strong> {{ pet.owner_name }}</p>
+                <p><strong>Contact:</strong> {{ pet.owner_contact or 'Not provided' }}</p>
+                <p><strong>Registered:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
+            </div>
 
             <div class="admin-actions">
                 <a href="{{ url_for('admin_pet_medical_records', pet_id=pet.id) }}" class="btn btn-sm btn-outline-info me-1" title="View Medical Records">

@@ -27,33 +27,32 @@
                                 <h5 class="mb-0">Pet Information</h5>
                             </div>
                             <div class="card-body">
-                                <!-- Current Pet Photo -->
-                                {% if pet.photo_url %}
-                                <div class="mb-4 text-center">
-                                    <h6>Current Pet Photo</h6>
-                                    <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 200px;">
-                                    <p class="text-muted mt-2">Upload a new photo below to replace the current one</p>
-                                </div>
-                                {% endif %}
-
-                                <!-- Photo Upload Section -->
-                                <div class="mb-4">
-                                    <h6><i class="fas fa-camera me-2"></i>Update Pet Photo (Optional)</h6>
-                                    <div class="border rounded p-3 text-center" style="background: #f8f9fa;">
-                                        <input type="file" name="pet_photo" id="pet_photo" class="d-none" accept="image/*">
-                                        <label for="pet_photo" class="cursor-pointer">
-                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
-                                            <p class="mb-0 text-muted">Click to upload new pet photo</p>
-                                            <small class="text-muted">PNG, JPG, JPEG, GIF up to 16MB</small>
-                                        </label>
-                                    </div>
-                                    <div id="photo-preview" class="text-center mt-3" style="display: none;">
-                                        <img id="preview-image" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
-                                        <p class="text-muted mt-2">New photo preview</p>
-                                    </div>
-                                </div>
-
                                 <form method="POST" action="{{ url_for('edit_pet', pet_id=pet.id) }}" enctype="multipart/form-data">
+                                    <!-- Current Pet Photo -->
+                                    {% if pet.photo_url %}
+                                    <div class="mb-4 text-center">
+                                        <h6>Current Pet Photo</h6>
+                                        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 200px;">
+                                        <p class="text-muted mt-2">Upload a new photo below to replace the current one</p>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Photo Upload Section -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-camera me-2"></i>Update Pet Photo (Optional)</h6>
+                                        <div class="border rounded p-3 text-center" style="background: #f8f9fa;">
+                                            <input type="file" name="pet_photo" id="pet_photo" class="d-none" accept="image/*">
+                                            <label for="pet_photo" class="cursor-pointer">
+                                                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                                <p class="mb-0 text-muted">Click to upload new pet photo</p>
+                                                <small class="text-muted">PNG, JPG, JPEG, GIF up to 16MB</small>
+                                            </label>
+                                        </div>
+                                        <div id="photo-preview" class="text-center mt-3" style="display: none;">
+                                            <img id="preview-image" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
+                                            <p class="text-muted mt-2">New photo preview</p>
+                                        </div>
+                                    </div>
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
                                             <label for="pet_name" class="form-label">Pet Name <span class="text-danger">*</span></label>

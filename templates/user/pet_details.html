@@ -54,7 +54,7 @@
                                 <div class="d-flex align-items-center mb-3">
                                     {% if pet.photo_url %}
                                     <div class="pet-photo-container me-4">
-                                        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}" alt="{{ pet.name }}" class="pet-photo rounded-circle shadow-lg" style="width: 150px; height: 150px; object-fit: cover; border: 4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.15);">
+                                        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="pet-photo rounded-circle shadow-lg" style="width: 150px; height: 150px; object-fit: cover; border: 4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.15);">
                                     </div>
                                     {% endif %}
                                     <div>
@@ -101,6 +101,9 @@
                                             <tr>
                                                 <td><strong>Status:</strong></td>
                                                 <td>
+                                                    {% if pet.available_for_adoption %}
+                                                    <span class="tag-available">Available for Adoption</span>
+                                                    {% endif %}
                                                     {% if pet.lost %}
                                                     <span class="badge bg-danger">Lost</span>
                                                     {% else %}
@@ -129,11 +132,6 @@
                                             <a href="{{ url_for('medical_records', pet_id=pet.id) }}" class="btn btn-outline-primary">
                                                 <i class="fas fa-plus-circle me-2"></i>Add Medical Records
                                             </a>
-                                            {% if not pet.photo_url %}
-                                            <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#uploadPhotoModal" data-pet-id="{{ pet.id }}">
-                                                <i class="fas fa-camera me-2"></i>Upload Photo
-                                            </button>
-                                            {% endif %}
                                             {% if not pet.lost %}
                                             <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reportLostModal" data-pet-id="{{ pet.id }}">
                                                 <i class="fas fa-exclamation-triangle me-2"></i>Report Lost
@@ -502,6 +500,57 @@ function submitMarkFound() {
         // Reset button state
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
+    });
+}
+
+function toggleAdoption(petId, available) {
+    const action = available ? 'put up for adoption' : 'remove from adoption';
+    const confirmMessage = `Are you sure you want to ${action} for this pet?`;
+
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    // Show loading state
+    const buttons = document.querySelectorAll(`button[onclick*="toggleAdoption(${petId}"]`);
+    buttons.forEach(btn => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Updating...';
+    });
+
+    fetch(`/user/toggle-pet-adoption/${petId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ available_for_adoption: available })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Pet ${available ? 'put up for adoption' : 'removed from adoption'} successfully!`);
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+            // Re-enable buttons
+            buttons.forEach(btn => {
+                btn.disabled = false;
+                btn.innerHTML = btn.onclick.toString().includes('true') ?
+                    '<i class="fas fa-heart me-2"></i>Put Up for Adoption' :
+                    '<i class="fas fa-times me-2"></i>Remove from Adoption';
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while updating adoption status.');
+        // Re-enable buttons
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.onclick.toString().includes('true') ?
+                '<i class="fas fa-heart me-2"></i>Put Up for Adoption' :
+                '<i class="fas fa-times me-2"></i>Remove from Adoption';
+        });
     });
 }
 
