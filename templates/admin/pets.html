@@ -87,6 +87,9 @@
             <p><strong>Registered:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
 
             <div class="admin-actions">
+                <a href="{{ url_for('admin_pet_medical_records', pet_id=pet.id) }}" class="btn btn-sm btn-outline-info me-1" title="View Medical Records">
+                    <i class="fas fa-eye"></i>
+                </a>
                 <button class="btn btn-sm btn-outline-warning archive-pet-btn" data-pet-id="{{ pet.id }}" data-pet-name="{{ pet.name }}" title="Archive Pet">
                     <i class="fas fa-archive"></i>
                 </button>

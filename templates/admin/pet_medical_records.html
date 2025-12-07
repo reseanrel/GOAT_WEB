@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Burger Menu Button (Mobile) -->
+    <button class="burger-menu d-md-none" id="burgerMenu">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="row g-0">
+        {% include "admin/sidebar.html" %}
+
+        <!-- Main Content -->
+        <div class="col-md-10 main-content-wrapper">
+            <div class="main-content">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h3>Medical Records - {{ pet.name }}</h3>
+                        <p class="text-muted mb-0">Owner: {{ pet.owner_name }} | Contact: {{ pet.owner_contact or 'Not provided' }}</p>
+                    </div>
+                    <div class="text-end">
+                        <a href="{{ url_for('admin_pets') }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to All Pets
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        {% if medical_records %}
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Record Type</th>
+                                            <th>Date</th>
+                                            <th>Next Due Date</th>
+                                            <th>Provider</th>
+                                            <th>Description</th>
+                                            <th>Receipt</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for record in medical_records %}
+                                        <tr>
+                                            <td>{{ record.record_type }}</td>
+                                            <td>{{ record.record_date.strftime('%m/%d/%Y') }}</td>
+                                            <td>{{ record.next_due_date.strftime('%m/%d/%Y') if record.next_due_date else 'N/A' }}</td>
+                                            <td>{{ record.provider or 'N/A' }}</td>
+                                            <td>{{ record.description or 'N/A' }}</td>
+                                            <td>
+                                                {% if record.photo_url %}
+                                                <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank">
+                                                    <img src="{{ url_for('static', filename='uploads/' + record.photo_url) }}" alt="Receipt" class="img-thumbnail" style="max-width: 100px; max-height: 100px; cursor: pointer;">
+                                                </a>
+                                                {% else %}
+                                                No receipt
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-notes-medical fa-4x text-muted mb-3"></i>
+                                <h5>No Medical Records</h5>
+                                <p class="text-muted">No medical records have been added for this pet yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logout Confirmation Modal -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logoutModalLabel">Confirm Logout</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to logout?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burgerMenu');
+    const closeSidebar = document.getElementById('closeSidebar');
+    const sidebar = document.getElementById('sidebar');
+
+    // Toggle sidebar on burger menu click
+    if (burgerMenu) {
+        burgerMenu.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.toggle('sidebar-open');
+        });
+    }
+
+    // Close sidebar on close button click
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', function() {
+            if (sidebar) sidebar.classList.remove('sidebar-open');
+        });
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function(event) {
+        if (window.innerWidth < 768) {
+            if (!sidebar.contains(event.target) && !burgerMenu.contains(event.target)) {
+                sidebar.classList.remove('sidebar-open');
+            }
+        }
+    });
+});
+
+function confirmLogout() {
+    var logoutModal = new bootstrap.Modal(document.getElementById('logoutModal'));
+    logoutModal.show();
+}
+</script>
+{% endblock %}

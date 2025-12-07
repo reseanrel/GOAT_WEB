@@ -38,14 +38,67 @@
                             <small class="text-muted">Reported Lost</small>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="stats-card">
-                            <h6><i class="fas fa-clock me-2"></i>Pending Approvals</h6>
+                            <h6><i class="fas fa-clock me-2"></i>Pending</h6>
                             <h3 class="text-warning">{{ pending_pets_count }}</h3>
                             <small class="text-muted">Awaiting Approval</small>
                         </div>
                     </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-heart me-2"></i>Adoption</h6>
+                            <h3 class="text-success">{{ adoption_count }}</h3>
+                            <small class="text-muted">Available for Adoption</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-users me-2"></i>Users</h6>
+                            <h3 class="text-info">{{ total_users }}</h3>
+                            <small class="text-muted">Total Registered</small>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stats-card">
+                            <h6><i class="fas fa-comments me-2"></i>Comments</h6>
+                            <h3 class="text-secondary">{{ new_comments_count }}</h3>
+                            <small class="text-muted">Total Comments</small>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Analytics Charts -->
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Pet Registrations (Last 12 Months)</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="registrationChart" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Pet Types Distribution</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="petTypeChart" width="300" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden data for charts -->
+                <script type="application/json" id="chartData">
+                {
+                    "monthlyRegistrations": {{ monthly_registrations | tojson }},
+                    "petTypeDistribution": {{ pet_type_distribution | tojson }}
+                }
+                </script>
 
                 <!-- All Registered Pets -->
                 <div class="card">
@@ -95,4 +148,121 @@
     </div>
 </div>
 
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get chart data from hidden script tag
+    const chartData = JSON.parse(document.getElementById('chartData').textContent);
+
+    // Monthly Registration Chart
+    const registrationCtx = document.getElementById('registrationChart').getContext('2d');
+    const registrationData = chartData.monthlyRegistrations;
+
+    const registrationLabels = registrationData.map(item => {
+        const date = new Date(item.month + '-01');
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+    });
+
+    const registrationCounts = registrationData.map(item => item.count);
+
+    new Chart(registrationCtx, {
+        type: 'line',
+        data: {
+            labels: registrationLabels,
+            datasets: [{
+                label: 'Pet Registrations',
+                data: registrationCounts,
+                borderColor: '#4CAF50',
+                backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointBackgroundColor: '#4CAF50',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 6,
+                pointHoverRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                },
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                }
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+
+    // Pet Type Distribution Chart
+    const petTypeCtx = document.getElementById('petTypeChart').getContext('2d');
+    const petTypeData = chartData.petTypeDistribution;
+
+    const petTypeLabels = petTypeData.map(item => item.category);
+    const petTypeCounts = petTypeData.map(item => item.count);
+
+    const colors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+    ];
+
+    new Chart(petTypeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: petTypeLabels,
+            datasets: [{
+                data: petTypeCounts,
+                backgroundColor: colors.slice(0, petTypeLabels.length),
+                borderColor: colors.slice(0, petTypeLabels.length).map(color => color.replace('1)', '0.8)')),
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return `${context.label}: ${context.parsed} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

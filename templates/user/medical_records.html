@@ -60,8 +60,8 @@
                                             <td>{{ record.description or 'N/A' }}</td>
                                             <td>
                                                 {% if record.photo_url %}
-                                                <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-image me-1"></i>View
+                                                <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank">
+                                                    <img src="{{ url_for('static', filename='uploads/' + record.photo_url) }}" alt="Receipt" class="img-thumbnail" style="max-width: 100px; max-height: 100px; cursor: pointer;">
                                                 </a>
                                                 {% else %}
                                                 No receipt
@@ -109,12 +109,12 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label class="form-label">Record Type *</label>
-                        <input type="text" class="form-control" name="record_type" placeholder="e.g., Vaccination, Check-up, Surgery, etc" required>
+                        <input type="text" class="form-control" name="vaccine_name" placeholder="e.g., Vaccination, Check-up, Surgery, etc" required>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Date *</label>
-                            <input type="date" class="form-control" name="record_date" required>
+                            <input type="date" class="form-control" name="date_administered" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Next Due Date</label>
@@ -173,7 +173,7 @@ document.getElementById('medicalRecordForm').addEventListener('submit', function
 // Set today's date as default for date fields
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date().toISOString().split('T')[0];
-    const recordDate = document.querySelector('input[name="record_date"]');
+    const recordDate = document.querySelector('input[name="date_administered"]');
     if (recordDate) {
         recordDate.value = today;
     }

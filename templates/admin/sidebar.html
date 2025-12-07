@@ -13,8 +13,8 @@
         <a href="{{ url_for('admin_pending_pets') }}" class="nav-link {% if request.endpoint == 'admin_pending_pets' %}active{% endif %}">
             <i class="fas fa-clock me-2"></i>Pending Approvals
         </a>
-        <a href="{{ url_for('admin_lost_pets') }}" class="nav-link {% if request.endpoint == 'admin_lost_pets' %}active{% endif %}">
-            <i class="fas fa-exclamation-triangle me-2"></i>Lost Pets
+        <a href="{{ url_for('admin_adoption') }}" class="nav-link {% if request.endpoint == 'admin_adoption' %}active{% endif %}">
+            <i class="fas fa-heart me-2"></i>Adoption
         </a>
         <a href="{{ url_for('admin_users') }}" class="nav-link {% if request.endpoint == 'admin_users' %}active{% endif %}">
             <i class="fas fa-users me-2"></i>Users

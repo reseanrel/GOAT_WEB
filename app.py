@@ -27,12 +27,19 @@ if not database_url:
 db = psycopg2.connect(database_url, sslmode='require')
 cursor = db.cursor(cursor_factory=RealDictCursor)
 
+def get_cursor():
+    """Get a database cursor, recreating if closed"""
+    global cursor
+    if cursor.closed:
+        cursor = db.cursor(cursor_factory=RealDictCursor)
+    return cursor
+
 # Ensure archived columns exist
 try:
-    cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
-    cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
-    cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
-    cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+    get_cursor().execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+    get_cursor().execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+    get_cursor().execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+    get_cursor().execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
     db.commit()
     print("Archive columns ensured")
 except Exception as e:
@@ -161,8 +168,8 @@ def login():
         password = request.form.get('password')
 
         # Fetch user from database
-        cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = cursor.fetchone()
+        get_cursor().execute("SELECT * FROM users WHERE email = %s", (email,))
+        user = get_cursor().fetchone()
 
         if not user and email == 'admin@pila.pets' and password == 'asdf':
             user = {
@@ -234,8 +241,8 @@ def register():
 
         try:
             # [SUCCESS] Check for duplicate email in the database
-            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
-            existing_user = cursor.fetchone()
+            get_cursor().execute("SELECT * FROM users WHERE email = %s", (email,))
+            existing_user = get_cursor().fetchone()
             if existing_user:
                 flash('Email already registered', 'error')
                 return render_template('auth/register.html')
@@ -288,7 +295,7 @@ def verify_email():
         if entered_code == pending_data['verification_code']:
             try:
                 # Insert new user into MySQL
-                cursor.execute("""
+                get_cursor().execute("""
                     INSERT INTO users (full_name, age, contact_number, address, email, password, is_admin)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
@@ -377,8 +384,8 @@ def admin_required(f):
 
 # Helper function to get user by ID
 def get_user_by_id(user_id):
-    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    return cursor.fetchone()
+    get_cursor().execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    return get_cursor().fetchone()
 
 # User Routes
 @app.route('/user/dashboard')
@@ -386,8 +393,8 @@ def get_user_by_id(user_id):
 def user_dashboard():
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
-    cursor.execute("SELECT * FROM pets WHERE owner_id = %s AND archived = FALSE AND status = 'approved'", (session['user_id'],))
-    user_pets = cursor.fetchall()
+    get_cursor().execute("SELECT * FROM pets WHERE owner_id = %s AND archived = FALSE AND status = 'approved'", (session['user_id'],))
+    user_pets = get_cursor().fetchall()
 
     return render_template('user/dashboard.html',
                           user_pets=user_pets,
@@ -435,9 +442,9 @@ def register_pet():
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
                 file.save(file_path)
 
-        cursor.execute("""
+        get_cursor().execute("""
             INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, available_for_adoption, status)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'approved')
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
         """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, available_for_adoption))
         db.commit()
 
@@ -1330,10 +1337,24 @@ def add_medical_record(pet_id):
     if not vaccine_name or not date_administered:
         return jsonify({'success': False, 'message': 'Vaccine name and date are required'})
 
+    # Handle file upload
+    photo_filename = None
+    if 'record_photo' in request.files:
+        file = request.files['record_photo']
+        if file and file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            # Add timestamp to make filename unique
+            import time
+            timestamp = str(int(time.time()))
+            name_part, ext = os.path.splitext(filename)
+            photo_filename = f"{name_part}_{timestamp}{ext}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
+            file.save(file_path)
+
     cursor.execute("""
-        INSERT INTO vaccinations (vaccine_name, date_administered, next_due_date, administered_by, notes, pet_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by, notes, pet_id))
+        INSERT INTO medical_records (record_type, record_date, next_due_date, provider, description, photo_url, pet_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by if administered_by else None, notes if notes else None, photo_filename, pet_id))
     db.commit()
 
     return jsonify({'success': True, 'message': 'Vaccination record added successfully'})
@@ -1355,6 +1376,38 @@ def admin_dashboard():
     cursor.execute("SELECT COUNT(*) AS total FROM comments WHERE pet_id IN (SELECT id FROM pets WHERE archived = FALSE)")
     new_comments_count = cursor.fetchone()['total']
 
+    # Get pet registrations per month (last 12 months)
+    cursor.execute("""
+        SELECT
+            TO_CHAR(registered_on, 'YYYY-MM') as month,
+            COUNT(*) as count
+        FROM pets
+        WHERE archived = FALSE AND registered_on >= CURRENT_DATE - INTERVAL '12 months'
+        GROUP BY TO_CHAR(registered_on, 'YYYY-MM')
+        ORDER BY TO_CHAR(registered_on, 'YYYY-MM')
+    """)
+    monthly_registrations = cursor.fetchall()
+
+    # Get pet type distribution
+    cursor.execute("""
+        SELECT
+            COALESCE(category, 'Other') as category,
+            COUNT(*) as count
+        FROM pets
+        WHERE archived = FALSE AND status = 'approved'
+        GROUP BY category
+        ORDER BY count DESC
+    """)
+    pet_type_distribution = cursor.fetchall()
+
+    # Get adoption statistics
+    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE available_for_adoption = TRUE AND archived = FALSE AND status = 'approved'")
+    adoption_count = cursor.fetchone()['total']
+
+    # Get user statistics
+    cursor.execute("SELECT COUNT(*) AS total FROM users WHERE archived = FALSE")
+    total_users = cursor.fetchone()['total']
+
     # Get recent non-archived approved pets with owner information
     cursor.execute("""
     SELECT pets.*, users.full_name AS owner_name
@@ -1371,6 +1424,10 @@ def admin_dashboard():
                           lost_pets_count=lost_pets_count,
                           pending_pets_count=pending_pets_count,
                           new_comments_count=new_comments_count,
+                          monthly_registrations=monthly_registrations,
+                          pet_type_distribution=pet_type_distribution,
+                          adoption_count=adoption_count,
+                          total_users=total_users,
                           pets=recent_pets_with_owners)
 
 @app.route('/admin/pets')
@@ -2230,6 +2287,44 @@ def reject_pet(pet_id):
 
     flash(f'Pet "{pet["name"]}" has been rejected', 'warning')
     return jsonify({'success': True, 'message': 'Pet rejected successfully'})
+
+@app.route('/admin/adoption')
+@admin_required
+def admin_adoption():
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+               users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
+        ORDER BY pets.registered_on DESC
+    """)
+    adoption_pets = cursor.fetchall()
+
+    return render_template('admin/adoption.html', adoption_pets=adoption_pets)
+
+@app.route('/admin/pet/<int:pet_id>/medical-records')
+@admin_required
+def admin_pet_medical_records(pet_id):
+    # Get pet data with owner information
+    cursor.execute("""
+        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+               users.contact_number AS owner_contact, users.address AS owner_address
+        FROM pets
+        JOIN users ON pets.owner_id = users.id
+        WHERE pets.id = %s AND pets.archived = FALSE
+    """, (pet_id,))
+    pet = cursor.fetchone()
+
+    if not pet:
+        flash('Pet not found', 'error')
+        return redirect(url_for('admin_pets'))
+
+    # Get medical records from database
+    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+    pet_medical_records = cursor.fetchall()
+
+    return render_template('admin/pet_medical_records.html', pet=pet, medical_records=pet_medical_records)
 
 @app.route('/admin/pending-pets')
 @admin_required
