@@ -28,7 +28,7 @@
    {% if pending_pets %}
        {% for pet in pending_pets %}
    <div class="pet-card admin-pet-card" data-status="pending" data-category="{{ pet.category }}">
-       {% if pet.photo_url %}
+       {% if pet.photo_url and pet.photo_url.strip() %}
        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
        {% else %}
        <img src="https://via.placeholder.com/260x200" class="pet-img">

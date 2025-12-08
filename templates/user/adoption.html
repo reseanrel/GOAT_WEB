@@ -19,6 +19,33 @@
                 </div>
 
 <div style="margin: 0 2rem 2rem 2rem;">
+    <!-- Search and Filter Controls -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('adoption') }}" class="d-flex flex-wrap align-items-end gap-3">
+                <div class="flex-grow-1" style="min-width: 200px;">
+                    <label for="search" class="form-label mb-1">Search Pets</label>
+                    <input type="text" class="form-control form-control-sm" id="search" name="search" value="{{ request.args.get('search', '') }}" placeholder="Search by name, breed, or owner...">
+                </div>
+                <div class="flex-grow-1" style="min-width: 150px;">
+                    <label for="category" class="form-label mb-1">Filter by Category</label>
+                    <select class="form-select form-select-sm" id="category" name="category">
+                        <option value="">All Categories</option>
+                        <option value="Dog" {% if request.args.get('category') == 'Dog' %}selected{% endif %}>Dogs</option>
+                        <option value="Cat" {% if request.args.get('category') == 'Cat' %}selected{% endif %}>Cats</option>
+                        <option value="Other" {% if request.args.get('category') == 'Other' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="fas fa-search me-1"></i>Search
+                    </button>
+                    <a href="{{ url_for('adoption') }}" class="btn btn-secondary btn-sm">Clear</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="header">
         <div>
             <h2>Available for Adoption</h2>
@@ -30,7 +57,7 @@
         {% if adoption_pets %}
             {% for pet in adoption_pets %}
         <div class="pet-card">
-            {% if pet.photo_url %}
+            {% if pet.photo_url and pet.photo_url.strip() %}
             <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
             {% else %}
             <img src="https://via.placeholder.com/260x200" class="pet-img">

@@ -887,14 +887,33 @@ def report_lost_confirmation(pet_id):
 
 @app.route('/lost-pets')
 def lost_pets():
-    cursor.execute("""
+    # Get search parameters
+    search_query = request.args.get('search', '').strip()
+    category_filter = request.args.get('category', '') or 'all'
+
+    # Build base query
+    query = """
         SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
                users.contact_number AS owner_contact, users.address AS owner_address
         FROM pets
         JOIN users ON pets.owner_id = users.id
         WHERE pets.lost = TRUE AND pets.archived = FALSE AND pets.status = 'approved'
-        ORDER BY pets.registered_on DESC
-    """)
+    """
+    params = []
+
+    # Add search conditions
+    if search_query:
+        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
+        search_pattern = f"%{search_query}%"
+        params.extend([search_pattern, search_pattern, search_pattern])
+
+    if category_filter != 'all':
+        query += " AND pets.category = %s"
+        params.append(category_filter)
+
+    query += " ORDER BY pets.registered_on DESC"
+
+    cursor.execute(query, params)
     lost_pets_list = cursor.fetchall()
 
     # Add flag to indicate if pet belongs to current user
@@ -912,7 +931,11 @@ def lost_pets():
         """, (pet['id'],))
         pet['comments'] = cursor.fetchall()
 
-    return render_template('lost_pets.html', lost_pets=lost_pets_list, datetime=datetime)
+    return render_template('lost_pets.html',
+                          lost_pets=lost_pets_list,
+                          datetime=datetime,
+                          search_query=search_query,
+                          category_filter=category_filter)
 
 @app.route('/adoption')
 @login_required
@@ -920,18 +943,41 @@ def adoption():
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
-    cursor.execute("""
+    # Get search parameters
+    search_query = request.args.get('search', '').strip()
+    category_filter = request.args.get('category', '') or 'all'
+
+    # Build base query
+    query = """
         SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
                 users.contact_number AS owner_contact, users.address AS owner_address
         FROM pets
         JOIN users ON pets.owner_id = users.id
         WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
         AND pets.owner_id != %s
-        ORDER BY pets.registered_on DESC
-    """, (session['user_id'],))
+    """
+    params = [session['user_id']]
+
+    # Add search conditions
+    if search_query:
+        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
+        search_pattern = f"%{search_query}%"
+        params.extend([search_pattern, search_pattern, search_pattern])
+
+    if category_filter != 'all':
+        query += " AND pets.category = %s"
+        params.append(category_filter)
+
+    query += " ORDER BY pets.registered_on DESC"
+
+    cursor.execute(query, params)
     adoption_pets = cursor.fetchall()
 
-    return render_template('user/adoption.html', adoption_pets=adoption_pets, datetime=datetime)
+    return render_template('user/adoption.html',
+                          adoption_pets=adoption_pets,
+                          datetime=datetime,
+                          search_query=search_query,
+                          category_filter=category_filter)
 
 @app.route('/express-adoption-interest/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1414,7 +1460,7 @@ def add_medical_record(pet_id):
             filename = secure_filename(file.filename)
             # Add timestamp to make filename unique
             import time
-            timestamp = str(int(time.time()))
+            timestamp = str(int(time.time() * 1000))
             name_part, ext = os.path.splitext(filename)
             photo_filename = f"{name_part}_{timestamp}{ext}"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
@@ -1503,17 +1549,47 @@ def admin_dashboard():
 @login_required
 @admin_required
 def admin_pets():
-    # Get all non-archived approved pets with owner information
-    cursor.execute("""
+    # Get search parameters
+    search_query = request.args.get('search', '').strip()
+    category_filter = request.args.get('category', '') or 'all'
+    status_filter = request.args.get('status', '') or 'all'
+
+    # Build base query
+    query = """
         SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
             users.contact_number AS owner_contact, users.address AS owner_address
         FROM pets
         JOIN users ON pets.owner_id = users.id
         WHERE pets.archived = FALSE AND pets.status = 'approved'
-    """)
+    """
+    params = []
+
+    # Add search conditions
+    if search_query:
+        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
+        search_pattern = f"%{search_query}%"
+        params.extend([search_pattern, search_pattern, search_pattern])
+
+    if category_filter != 'all':
+        query += " AND pets.category = %s"
+        params.append(category_filter)
+
+    if status_filter == 'lost':
+        query += " AND pets.lost = TRUE"
+    elif status_filter == 'safe':
+        query += " AND pets.lost = FALSE"
+
+    query += " ORDER BY pets.registered_on DESC"
+
+    cursor.execute(query, params)
     pets_with_owners = cursor.fetchall()
 
-    return render_template('admin/pets.html', pets=pets_with_owners, datetime=datetime)
+    return render_template('admin/pets.html',
+                          pets=pets_with_owners,
+                          datetime=datetime,
+                          search_query=search_query,
+                          category_filter=category_filter,
+                          status_filter=status_filter)
 
 @app.route('/admin/users')
 @login_required
@@ -1533,98 +1609,6 @@ def admin_users():
     return render_template('admin/users.html', users=users_with_pet_count)
 
 
-@app.route('/admin/deactivate-user/<int:user_id>', methods=['POST'])
-@login_required
-@admin_required
-def deactivate_user(user_id):
-    # Get user data
-    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
-
-    if not user:
-        return jsonify({'success': False, 'message': 'User not found'})
-
-    if user['is_admin']:
-        return jsonify({'success': False, 'message': 'Cannot deactivate admin user'})
-
-    # Toggle active status
-    new_status = not user['active']
-    cursor.execute("UPDATE users SET active = %s WHERE id = %s", (new_status, user_id))
-    db.commit()
-
-    action = 'deactivated' if not new_status else 'reactivated'
-
-    # Send email notification
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"Account {action.title()} - {app.config['COMPANY_NAME']}"
-        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
-        msg['To'] = user['email']
-
-        header_color = '#FF6B35' if not new_status else '#4CAF50'
-        status_message = "You will no longer be able to log in or access your account until it is reactivated." if not new_status else "You can now log in and access your account again."
-
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: {header_color}; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>{app.config['COMPANY_NAME']} - Account {action.title()}</h1>
-            </div>
-            <div class="content">
-                <p>Hello {user['full_name']},</p>
-                <p>Your account has been {action} by an administrator.</p>
-                <p>{status_message}</p>
-                <p>If you have any questions, please contact support.</p>
-            </div>
-            <div class="footer">
-                <p>This is an automated message. Please do not reply to this email.</p>
-                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-            </div>
-        </body>
-        </html>
-        """
-
-        text_content = f"""
-        {app.config['COMPANY_NAME']} - Account {action.title()}
-
-        Hello {user['full_name']},
-
-        Your account has been {action} by an administrator.
-
-        {'You will no longer be able to log in or access your account until it is reactivated.' if not new_status else 'You can now log in and access your account again.'}
-
-        If you have any questions, please contact support.
-
-        This is an automated message. Please do not reply to this email.
-        """
-
-        part1 = MIMEText(text_content, 'plain')
-        part2 = MIMEText(html_content, 'html')
-        msg.attach(part1)
-        msg.attach(part2)
-
-        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-        server.starttls()
-        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-        server.send_message(msg)
-        server.quit()
-
-        print(f"[SUCCESS] Account {action} notification sent to {user['email']}")
-
-    except Exception as e:
-        print(f"[ERROR] Error sending notification email: {str(e)}")
-
-    flash(f'User "{user["full_name"]}" {action} successfully', 'success')
-    return jsonify({'success': True, 'message': f'User {action} successfully'})
 
 
 @app.route('/admin/archive-pet/<int:pet_id>', methods=['POST'])

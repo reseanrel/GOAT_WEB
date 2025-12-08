@@ -24,32 +24,38 @@
                     </div>
                 </div>
 
-                <!-- Pets Table -->
-                <!-- Filter Controls -->
+                <!-- Search and Filter Controls -->
                 <div class="card mb-3">
                     <div class="card-body">
-                        <div class="d-flex flex-wrap align-items-center gap-3">
+                        <form method="GET" action="{{ url_for('admin_pets') }}" class="d-flex flex-wrap align-items-end gap-3">
                             <div class="flex-grow-1" style="min-width: 200px;">
-                                <label for="statusFilter" class="form-label mb-1">Filter by Status</label>
-                                <select class="form-select form-select-sm" id="statusFilter">
-                                    <option value="all">All Pets</option>
-                                    <option value="safe">Safe Pets</option>
-                                    <option value="lost">Lost Pets</option>
+                                <label for="search" class="form-label mb-1">Search Pets</label>
+                                <input type="text" class="form-control form-control-sm" id="search" name="search" value="{{ request.args.get('search', '') }}" placeholder="Search by name, breed, or owner...">
+                            </div>
+                            <div class="flex-grow-1" style="min-width: 150px;">
+                                <label for="category" class="form-label mb-1">Filter by Category</label>
+                                <select class="form-select form-select-sm" id="category" name="category">
+                                    <option value="">All Categories</option>
+                                    <option value="Dog" {% if request.args.get('category') == 'Dog' %}selected{% endif %}>Dogs</option>
+                                    <option value="Cat" {% if request.args.get('category') == 'Cat' %}selected{% endif %}>Cats</option>
+                                    <option value="Other" {% if request.args.get('category') == 'Other' %}selected{% endif %}>Other</option>
                                 </select>
                             </div>
-                            <div class="flex-grow-1" style="min-width: 200px;">
-                                <label for="categoryFilter" class="form-label mb-1">Filter by Category</label>
-                                <select class="form-select form-select-sm" id="categoryFilter">
-                                    <option value="all">All Categories</option>
-                                    <option value="Dog">Dogs</option>
-                                    <option value="Cat">Cats</option>
-                                    <option value="Other">Other</option>
+                            <div class="flex-grow-1" style="min-width: 150px;">
+                                <label for="status" class="form-label mb-1">Filter by Status</label>
+                                <select class="form-select form-select-sm" id="status" name="status">
+                                    <option value="">All Pets</option>
+                                    <option value="safe" {% if request.args.get('status') == 'safe' %}selected{% endif %}>Safe Pets</option>
+                                    <option value="lost" {% if request.args.get('status') == 'lost' %}selected{% endif %}>Lost Pets</option>
                                 </select>
                             </div>
-                            <div>
-                                <button class="btn btn-secondary btn-sm" id="clearFiltersBtn">Clear Filters</button>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-search me-1"></i>Search
+                                </button>
+                                <a href="{{ url_for('admin_pets') }}" class="btn btn-secondary btn-sm">Clear</a>
                             </div>
-                        </div>
+                        </form>
                     </div>
                 </div>
 
@@ -57,7 +63,7 @@
     {% if pets %}
         {% for pet in pets %}
     <div class="pet-card admin-pet-card" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
-        {% if pet.photo_url %}
+        {% if pet.photo_url and pet.photo_url.strip() %}
         <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
         {% else %}
         <img src="https://via.placeholder.com/260x200" class="pet-img">
@@ -171,33 +177,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    const statusFilter = document.getElementById('statusFilter');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const petCards = document.querySelectorAll('.admin-pet-card');
-
-    function filterPets() {
-        if (!statusFilter || !categoryFilter) return;
-
-        const statusValue = statusFilter.value;
-        const categoryValue = categoryFilter.value;
-
-        petCards.forEach(card => {
-            const status = card.getAttribute('data-status');
-            const category = card.getAttribute('data-category');
-
-            const statusMatch = statusValue === 'all' || status === statusValue;
-            const categoryMatch = categoryValue === 'all' || category === categoryValue;
-
-            if (statusMatch && categoryMatch) {
-                card.style.display = '';
-            } else {
-                card.style.display = 'none';
-            }
-        });
-    }
-
-    if (statusFilter) statusFilter.addEventListener('change', filterPets);
-    if (categoryFilter) categoryFilter.addEventListener('change', filterPets);
 
     // Archive pet functionality
     let petToArchive = null;
