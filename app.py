@@ -454,7 +454,7 @@ def user_dashboard():
     # Optimized: Single query with only needed columns
     with DatabaseConnection() as (cursor, conn):
         cursor.execute("""
-            SELECT id, name, category, pet_type, age, color, gender, photo_url, available_for_adoption, lost
+            SELECT id, name, category, pet_type, age, color, gender, photo_url, available_for_adoption, lost, deceased
             FROM pets
             WHERE owner_id = %s AND archived = FALSE AND status = 'approved'
             ORDER BY registered_on DESC
@@ -811,6 +811,9 @@ def mark_found_pet(pet_id):
         if not pet:
             return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
+        if pet['deceased']:
+            return jsonify({'success': False, 'message': 'Cannot mark a deceased pet as found'})
+
         # Get comment from request
         data = request.get_json()
         comment = data.get('comment', '').strip() if data else ''
@@ -927,6 +930,50 @@ def mark_found_pet(pet_id):
     flash(f'Pet "{pet["name"]}" has been marked as found.', 'success')
     return jsonify({'success': True, 'message': 'Pet marked as found successfully'})
 
+@app.route('/user/mark-pet-deceased/<int:pet_id>', methods=['POST'])
+@login_required
+def mark_pet_deceased(pet_id):
+    if session.get('is_admin'):
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
+
+        if not pet:
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+
+        if pet['deceased']:
+            return jsonify({'success': False, 'message': 'Pet is already marked as deceased'})
+
+        # Update pet as deceased
+        cursor.execute("UPDATE pets SET deceased = TRUE, deceased_at = NOW() WHERE id = %s", (pet_id,))
+
+    flash(f'Pet "{pet["name"]}" has been marked as deceased.', 'info')
+    return jsonify({'success': True, 'message': 'Pet marked as deceased successfully'})
+
+@app.route('/user/mark-pet-alive/<int:pet_id>', methods=['POST'])
+@login_required
+def mark_pet_alive(pet_id):
+    if session.get('is_admin'):
+        return jsonify({'success': False, 'message': 'Access denied'})
+
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
+
+        if not pet:
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+
+        if not pet['deceased']:
+            return jsonify({'success': False, 'message': 'Pet is already marked as alive'})
+
+        # Update pet as alive
+        cursor.execute("UPDATE pets SET deceased = FALSE, deceased_at = NULL WHERE id = %s", (pet_id,))
+
+    flash(f'Pet "{pet["name"]}" has been marked as alive.', 'success')
+    return jsonify({'success': True, 'message': 'Pet marked as alive successfully'})
+
 @app.route('/user/report-lost-confirmation/<int:pet_id>')
 @login_required
 def report_lost_confirmation(pet_id):
@@ -970,7 +1017,7 @@ def lost_pets():
                    u.contact_number AS owner_contact, u.address AS owner_address
             FROM pets p
             JOIN users u ON p.owner_id = u.id
-            WHERE p.lost = TRUE AND p.archived = FALSE AND p.status = 'approved'
+            WHERE p.lost = TRUE AND p.archived = FALSE AND p.status = 'approved' AND p.deceased = FALSE
         """
         params = []
 
@@ -1059,7 +1106,7 @@ def adoption():
                    u.contact_number AS owner_contact, u.address AS owner_address
             FROM pets p
             JOIN users u ON p.owner_id = u.id
-            WHERE p.available_for_adoption = TRUE AND p.lost = FALSE AND p.archived = FALSE AND p.status = 'approved'
+            WHERE p.available_for_adoption = TRUE AND p.lost = FALSE AND p.archived = FALSE AND p.status = 'approved' AND p.deceased = FALSE
             AND p.owner_id != %s
         """
         params = [session['user_id']]
@@ -1112,148 +1159,167 @@ def express_adoption_interest(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
 
-    # Check if pet is available for adoption
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND available_for_adoption = TRUE AND lost = FALSE", (pet_id,))
-    pet = cursor.fetchone()
+    cursor, conn = get_cursor()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not available for adoption'})
-
-    # Prevent users from expressing interest in their own pets
-    if pet['owner_id'] == session['user_id']:
-        return jsonify({'success': False, 'message': 'You cannot express interest in adopting your own pet'})
-
-    message = request.form.get('message', '').strip()
-    contact = request.form.get('contact', '').strip()
-
-    if not message:
-        return jsonify({'success': False, 'message': 'Please provide a message'})
-
-    # Get adopter info
-    adopter_name = session['user_name']
-    adopter_email = session['user_email']
-    adopter_contact = session.get('user_contact', '')
-
-    # Get pet owner info
-    cursor.execute("SELECT full_name, email FROM users WHERE id = %s", (pet['owner_id'],))
-    owner = cursor.fetchone()
-
-    if not owner:
-        return jsonify({'success': False, 'message': 'Owner information not found'})
-
-    # Insert adoption interest as comment
-    full_message = f"ADOPTION INTEREST from {adopter_name}:\n{message}"
-    if contact:
-        full_message += f"\n\nAdditional contact: {contact}"
-    full_message += f"\n\nAdopter Email: {adopter_email}"
-    if adopter_contact:
-        full_message += f"\nAdopter Phone: {adopter_contact}"
-
-    cursor.execute("""
-        INSERT INTO comments (pet_id, user_id, comment)
-        VALUES (%s, %s, %s)
-    """, (pet_id, session['user_id'], full_message))
-    db.commit()
-
-    # Send email notification to pet owner
     try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"Adoption Interest for Your Pet: {pet['name']}"
-        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
-        msg['To'] = owner['email']
+        # Check if pet is available for adoption
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND available_for_adoption = TRUE AND lost = FALSE", (pet_id,))
+        pet = cursor.fetchone()
 
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                .pet-info {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
-                .interest-box {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
-                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>{app.config['COMPANY_NAME']} - Adoption Interest</h1>
-            </div>
-            <div class="content">
-                <p>Hello {owner['full_name']},</p>
-                <p>Someone has expressed interest in adopting your pet!</p>
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet not available for adoption'})
 
-                <div class="pet-info">
-                    <h4>Pet Information</h4>
-                    <p><strong>Pet Name:</strong> {pet['name']}</p>
-                    <p><strong>Category:</strong> {pet['category']}</p>
-                    <p><strong>Type:</strong> {pet['pet_type'] or 'Not specified'}</p>
-                    <p><strong>Age:</strong> {pet['age']} year(s)</p>
+        # Prevent users from expressing interest in their own pets
+        if pet['owner_id'] == session['user_id']:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'You cannot express interest in adopting your own pet'})
+
+        message = request.form.get('message', '').strip()
+        contact = request.form.get('contact', '').strip()
+
+        if not message:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Please provide a message'})
+
+        # Get adopter info
+        adopter_name = session['user_name']
+        adopter_email = session['user_email']
+        adopter_contact = session.get('user_contact', '')
+
+        # Get pet owner info
+        cursor.execute("SELECT full_name, email FROM users WHERE id = %s", (pet['owner_id'],))
+        owner = cursor.fetchone()
+
+        if not owner:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Owner information not found'})
+
+        # Insert adoption interest as comment
+        full_message = f"ADOPTION INTEREST from {adopter_name}:\n{message}"
+        if contact:
+            full_message += f"\n\nAdditional contact: {contact}"
+        full_message += f"\n\nAdopter Email: {adopter_email}"
+        if adopter_contact:
+            full_message += f"\nAdopter Phone: {adopter_contact}"
+
+        cursor.execute("""
+            INSERT INTO comments (pet_id, user_id, comment)
+            VALUES (%s, %s, %s)
+        """, (pet_id, session['user_id'], full_message))
+        conn.commit()
+
+        # Send email notification to pet owner
+        try:
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Adoption Interest for Your Pet: {pet['name']}"
+            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
+            msg['To'] = owner['email']
+
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #28a745; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                    .pet-info {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
+                    .interest-box {{ background: #fff; padding: 20px; border-left: 4px solid #28a745; margin: 20px 0; }}
+                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>{app.config['COMPANY_NAME']} - Adoption Interest</h1>
                 </div>
+                <div class="content">
+                    <p>Hello {owner['full_name']},</p>
+                    <p>Someone has expressed interest in adopting your pet!</p>
 
-                <div class="interest-box">
-                    <h4>Adoption Interest Details</h4>
-                    <p><strong>Interested Person:</strong> {adopter_name}</p>
-                    <p><strong>Email:</strong> {adopter_email}</p>
-                    {("<p><strong>Phone:</strong> " + adopter_contact + "</p>") if adopter_contact else ""}
-                    {("<p><strong>Additional Contact:</strong> " + contact + "</p>") if contact else ""}
-                    <p><strong>Message:</strong></p>
-                    <p style="background: #f8f9fa; padding: 15px; border-radius: 3px;">{message}</p>
+                    <div class="pet-info">
+                        <h4>Pet Information</h4>
+                        <p><strong>Pet Name:</strong> {pet['name']}</p>
+                        <p><strong>Category:</strong> {pet['category']}</p>
+                        <p><strong>Type:</strong> {pet['pet_type'] or 'Not specified'}</p>
+                        <p><strong>Age:</strong> {pet['age']} year(s)</p>
+                    </div>
+
+                    <div class="interest-box">
+                        <h4>Adoption Interest Details</h4>
+                        <p><strong>Interested Person:</strong> {adopter_name}</p>
+                        <p><strong>Email:</strong> {adopter_email}</p>
+                        {("<p><strong>Phone:</strong> " + adopter_contact + "</p>") if adopter_contact else ""}
+                        {("<p><strong>Additional Contact:</strong> " + contact + "</p>") if contact else ""}
+                        <p><strong>Message:</strong></p>
+                        <p style="background: #f8f9fa; padding: 15px; border-radius: 3px;">{message}</p>
+                    </div>
+
+                    <p>Please review this adoption interest and contact the interested person if you'd like to proceed with the adoption process.</p>
+                    <p>You can also respond through the admin dashboard or contact our team for assistance.</p>
                 </div>
+                <div class="footer">
+                    <p>This is an automated notification from {app.config['COMPANY_NAME']}.</p>
+                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                </div>
+            </body>
+            </html>
+            """
 
-                <p>Please review this adoption interest and contact the interested person if you'd like to proceed with the adoption process.</p>
-                <p>You can also respond through the admin dashboard or contact our team for assistance.</p>
-            </div>
-            <div class="footer">
-                <p>This is an automated notification from {app.config['COMPANY_NAME']}.</p>
-                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-            </div>
-        </body>
-        </html>
-        """
+            text_content = f"""
+            {app.config['COMPANY_NAME']} - Adoption Interest
 
-        text_content = f"""
-        {app.config['COMPANY_NAME']} - Adoption Interest
+            Hello {owner['full_name']},
 
-        Hello {owner['full_name']},
+            Someone has expressed interest in adopting your pet {pet['name']}!
 
-        Someone has expressed interest in adopting your pet {pet['name']}!
+            Pet Information:
+            - Name: {pet['name']}
+            - Category: {pet['category']}
+            - Type: {pet['pet_type'] or 'Not specified'}
+            - Age: {pet['age']} year(s)
 
-        Pet Information:
-        - Name: {pet['name']}
-        - Category: {pet['category']}
-        - Type: {pet['pet_type'] or 'Not specified'}
-        - Age: {pet['age']} year(s)
+            Adoption Interest Details:
+            - Interested Person: {adopter_name}
+            - Email: {adopter_email}
+            {("- Phone: " + adopter_contact) if adopter_contact else ""}
+            {("- Additional Contact: " + contact) if contact else ""}
+            - Message: {message}
 
-        Adoption Interest Details:
-        - Interested Person: {adopter_name}
-        - Email: {adopter_email}
-        {("- Phone: " + adopter_contact) if adopter_contact else ""}
-        {("- Additional Contact: " + contact) if contact else ""}
-        - Message: {message}
+            Please review this adoption interest and contact the interested person if you'd like to proceed.
 
-        Please review this adoption interest and contact the interested person if you'd like to proceed.
+            This is an automated notification from {app.config['COMPANY_NAME']}.
+            """
 
-        This is an automated notification from {app.config['COMPANY_NAME']}.
-        """
+            part1 = MIMEText(text_content, 'plain')
+            part2 = MIMEText(html_content, 'html')
+            msg.attach(part1)
+            msg.attach(part2)
 
-        part1 = MIMEText(text_content, 'plain')
-        part2 = MIMEText(html_content, 'html')
-        msg.attach(part1)
-        msg.attach(part2)
+            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+            server.starttls()
+            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+            server.send_message(msg)
+            server.quit()
 
-        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-        server.starttls()
-        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-        server.send_message(msg)
-        server.quit()
+            print(f"[SUCCESS] Adoption interest notification sent to {owner['email']} for pet {pet['name']}")
 
-        print(f"[SUCCESS] Adoption interest notification sent to {owner['email']} for pet {pet['name']}")
+        except Exception as e:
+            print(f"[ERROR] Error sending adoption interest email: {str(e)}")
+
+        db_pool.putconn(conn)
+        return jsonify({'success': True, 'message': 'Interest submitted successfully'})
 
     except Exception as e:
-        print(f"[ERROR] Error sending adoption interest email: {str(e)}")
-
-    return jsonify({'success': True, 'message': 'Interest submitted successfully'})
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        print(f"[ERROR] Error in express_adoption_interest: {str(e)}")
+        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'})
 
 @app.route('/lost-pet/<int:pet_id>/add-comment', methods=['POST'])
 @login_required
@@ -1436,89 +1502,103 @@ def edit_pet(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
-    print(f"[DEBUG] Fetched pet {pet_id} from database, photo_url: '{pet['photo_url']}' (type: {type(pet['photo_url'])})")
+    cursor, conn = get_cursor()
+    try:
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
+        print(f"[DEBUG] Fetched pet {pet_id} from database, photo_url: '{pet['photo_url']}' (type: {type(pet['photo_url'])})")
 
-    if not pet:
-        flash('Pet not found or access denied', 'error')
-        return redirect(url_for('user_dashboard'))
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            flash('Pet not found or access denied', 'error')
+            return redirect(url_for('user_dashboard'))
 
-    if request.method == 'POST':
-        name = request.form.get('pet_name')
-        category = request.form.get('pet_category')
-        pet_type = request.form.get('pet_type')
-        age = request.form.get('age')
-        color = request.form.get('color')
-        gender = request.form.get('gender')
-        available_for_adoption = request.form.get('for_adoption') == 'on'
+        if request.method == 'POST':
+            name = request.form.get('pet_name')
+            category = request.form.get('pet_category')
+            pet_type = request.form.get('pet_type')
+            age = request.form.get('age')
+            color = request.form.get('color')
+            gender = request.form.get('gender')
+            available_for_adoption = request.form.get('for_adoption') == 'on'
 
-        if not name or not category:
-            flash('Pet name and category are required', 'error')
-            return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
+            if not name or not category:
+                flash('Pet name and category are required', 'error')
+                return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
 
-        # Age validation
-        if age and (not age.isdigit() or not (0 <= int(age) <= 50)):
-            flash('Please enter a valid age between 0 and 50 years', 'error')
-            return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
+            # Age validation
+            if age and (not age.isdigit() or not (0 <= int(age) <= 50)):
+                flash('Please enter a valid age between 0 and 50 years', 'error')
+                return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
 
-        # Handle photo upload
-        print(f"[DEBUG] Initial photo_url: {pet['photo_url']}")
-        photo_filename = pet['photo_url']  # Keep existing photo by default
-        if 'pet_photo' in request.files:
-            file = request.files['pet_photo']
-            print(f"[DEBUG] File received: {file.filename if file else 'None'}")
-            if file and file.filename != '' and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                # Add timestamp to make filename unique
-                import time
-                timestamp = str(int(time.time() * 1000))
-                name_part, ext = os.path.splitext(filename)
-                new_photo_filename = f"{name_part}_{timestamp}{ext}"
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_photo_filename)
-                print(f"[DEBUG] Attempting to save file to: {file_path}")
-                try:
-                    file.save(file_path)
-                    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-                        print(f"[DEBUG] File saved successfully: {file_path}")
-                        photo_filename = new_photo_filename  # Only update if saved successfully
-                    else:
-                        print(f"[DEBUG] File not saved or empty: {file_path}")
+            # Handle photo upload
+            print(f"[DEBUG] Initial photo_url: {pet['photo_url']}")
+            photo_filename = pet['photo_url']  # Keep existing photo by default
+            if 'pet_photo' in request.files:
+                file = request.files['pet_photo']
+                print(f"[DEBUG] File received: {file.filename if file else 'None'}")
+                if file and file.filename != '' and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    # Add timestamp to make filename unique
+                    import time
+                    timestamp = str(int(time.time() * 1000))
+                    name_part, ext = os.path.splitext(filename)
+                    new_photo_filename = f"{name_part}_{timestamp}{ext}"
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], new_photo_filename)
+                    print(f"[DEBUG] Attempting to save file to: {file_path}")
+                    try:
+                        file.save(file_path)
+                        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+                            print(f"[DEBUG] File saved successfully: {file_path}")
+                            photo_filename = new_photo_filename  # Only update if saved successfully
+                        else:
+                            print(f"[DEBUG] File not saved or empty: {file_path}")
+                            # Keep old photo_filename
+                    except Exception as e:
+                        print(f"[DEBUG] Error saving file: {e}")
                         # Keep old photo_filename
-                except Exception as e:
-                    print(f"[DEBUG] Error saving file: {e}")
-                    # Keep old photo_filename
-                print(f"[DEBUG] Final photo_filename: {photo_filename}")
+                    print(f"[DEBUG] Final photo_filename: {photo_filename}")
+                else:
+                    print(f"[DEBUG] No valid photo file uploaded")
             else:
-                print(f"[DEBUG] No valid photo file uploaded")
-        else:
-            print(f"[DEBUG] No photo file in request")
+                print(f"[DEBUG] No photo file in request")
 
-        try:
-            print(f"[DEBUG] Updating pet {pet_id} with photo_filename: '{photo_filename}' (type: {type(photo_filename)})")
-            cursor.execute("""
-                UPDATE pets
-                SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, available_for_adoption = %s, photo_url = %s
-                WHERE id = %s AND owner_id = %s
-            """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_filename, pet_id, session['user_id']))
+            try:
+                print(f"[DEBUG] Updating pet {pet_id} with photo_filename: '{photo_filename}' (type: {type(photo_filename)})")
+                cursor.execute("""
+                    UPDATE pets
+                    SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, available_for_adoption = %s, photo_url = %s
+                    WHERE id = %s AND owner_id = %s
+                """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_filename, pet_id, session['user_id']))
 
-            # Verify the update
-            cursor.execute("SELECT photo_url FROM pets WHERE id = %s", (pet_id,))
-            updated_pet = cursor.fetchone()
-            print(f"[DEBUG] After update, photo_url in database: '{updated_pet['photo_url']}'")
+                # Verify the update
+                cursor.execute("SELECT photo_url FROM pets WHERE id = %s", (pet_id,))
+                updated_pet = cursor.fetchone()
+                print(f"[DEBUG] After update, photo_url in database: '{updated_pet['photo_url']}'")
 
-            flash(f'Pet "{name}" updated successfully!', 'success')
-            # Refetch the updated pet data to show in the edit form
-            cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-            updated_pet = cursor.fetchone()
-            return render_template('user/edit_pet.html', pet=updated_pet, datetime=datetime)
+                flash(f'Pet "{name}" updated successfully!', 'success')
+                # Refetch the updated pet data to show in the edit form
+                cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+                updated_pet = cursor.fetchone()
+                return render_template('user/edit_pet.html', pet=updated_pet, datetime=datetime)
 
-        except Exception as e:
-            print("[ERROR] ERROR:", e)
-            db.rollback()
-            flash('An error occurred while updating the pet. Please try again.', 'error')
+            except Exception as e:
+                print("[ERROR] ERROR:", e)
+                db.rollback()
+                flash('An error occurred while updating the pet. Please try again.', 'error')
 
-    return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
+        conn.commit()
+        db_pool.putconn(conn)
+        return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        print(f"[ERROR] Error in edit_pet: {str(e)}")
+        flash('An error occurred while loading the pet. Please try again.', 'error')
+        return redirect(url_for('user_dashboard'))
 
 @app.route('/user/add-vaccination/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1567,6 +1647,11 @@ def toggle_pet_adoption(pet_id):
             conn.commit()
             db_pool.putconn(conn)
             return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+
+        if pet['deceased']:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Cannot change adoption status for a deceased pet'})
 
         data = request.get_json()
         available_for_adoption = data.get('available_for_adoption', False)
@@ -1637,10 +1722,10 @@ def admin_dashboard():
         # Optimized: Combine multiple COUNT queries into a single query with conditional aggregation
         cursor.execute("""
             SELECT
-                COUNT(CASE WHEN archived = FALSE AND status = 'approved' THEN 1 END) as total_pets,
-                COUNT(CASE WHEN lost = TRUE AND archived = FALSE AND status = 'approved' THEN 1 END) as lost_pets_count,
+                COUNT(CASE WHEN archived = FALSE AND status = 'approved' AND deceased = FALSE THEN 1 END) as total_pets,
+                COUNT(CASE WHEN lost = TRUE AND archived = FALSE AND status = 'approved' AND deceased = FALSE THEN 1 END) as lost_pets_count,
                 COUNT(CASE WHEN status = 'pending' AND archived = FALSE THEN 1 END) as pending_pets_count,
-                COUNT(CASE WHEN available_for_adoption = TRUE AND archived = FALSE AND status = 'approved' THEN 1 END) as adoption_count
+                COUNT(CASE WHEN available_for_adoption = TRUE AND archived = FALSE AND status = 'approved' AND deceased = FALSE THEN 1 END) as adoption_count
             FROM pets
         """)
         pet_stats = cursor.fetchone()
@@ -1676,7 +1761,7 @@ def admin_dashboard():
                 COALESCE(category, 'Other') as category,
                 COUNT(*) as count
             FROM pets
-            WHERE archived = FALSE AND status = 'approved'
+            WHERE archived = FALSE AND status = 'approved' AND deceased = FALSE
             GROUP BY category
             ORDER BY count DESC
             LIMIT 10
@@ -1688,7 +1773,7 @@ def admin_dashboard():
             SELECT p.id, p.name, p.category, p.pet_type, p.photo_url, p.registered_on, u.full_name AS owner_name
             FROM pets p
             JOIN users u ON u.id = p.owner_id
-            WHERE p.archived = FALSE AND p.status = 'approved'
+            WHERE p.archived = FALSE AND p.status = 'approved' AND p.deceased = FALSE
             ORDER BY p.registered_on DESC
             LIMIT 5
         """)
@@ -1738,7 +1823,7 @@ def admin_pets():
                    u.contact_number AS owner_contact, u.address AS owner_address
             FROM pets p
             JOIN users u ON p.owner_id = u.id
-            WHERE p.archived = FALSE AND p.status = 'approved'
+            WHERE p.archived = FALSE AND p.status = 'approved' AND p.deceased = FALSE
         """
         params = []
 
@@ -2041,10 +2126,14 @@ def admin_archived():
                 users.contact_number AS owner_contact, users.address AS owner_address
             FROM pets
             JOIN users ON pets.owner_id = users.id
-            WHERE pets.archived = TRUE
-            ORDER BY pets.archived_at DESC
+            WHERE pets.archived = TRUE OR pets.deceased = TRUE
+            ORDER BY COALESCE(pets.archived_at, pets.deceased_at) DESC
         """)
         archived_pets = cursor.fetchall()
+
+        # Add sequential display_id starting from 1 for archived pets
+        for index, pet in enumerate(archived_pets, start=1):
+            pet['display_id'] = index
 
         # Get all archived users with pet count
         cursor.execute("""
@@ -2080,10 +2169,14 @@ def admin_archived_pets():
                 users.contact_number AS owner_contact, users.address AS owner_address
             FROM pets
             JOIN users ON pets.owner_id = users.id
-            WHERE pets.archived = TRUE
-            ORDER BY pets.archived_at DESC
+            WHERE pets.archived = TRUE OR pets.deceased = TRUE
+            ORDER BY COALESCE(pets.archived_at, pets.deceased_at) DESC
         """)
         archived_pets = cursor.fetchall()
+
+        # Add sequential display_id starting from 1
+        for index, pet in enumerate(archived_pets, start=1):
+            pet['display_id'] = index
 
         conn.commit()
         db_pool.putconn(conn)
@@ -2202,6 +2295,13 @@ def mark_pet_found(pet_id):
     note = data.get('note', '').strip() if data else ''
 
     with DatabaseConnection() as (cursor, conn):
+        # Check if pet is deceased
+        cursor.execute("SELECT deceased FROM pets WHERE id = %s", (pet_id,))
+        pet_check = cursor.fetchone()
+
+        if pet_check and pet_check['deceased']:
+            return jsonify({'success': False, 'message': 'Cannot mark a deceased pet as found'})
+
         # Update pet as found
         cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
 
@@ -2309,102 +2409,114 @@ def admin_reply_to_lost_pet(pet_id):
     if not reply:
         return jsonify({'success': False, 'message': 'Reply cannot be empty'})
 
-    # Insert admin reply as comment
-    # For admin (id=0), set user_id to NULL since admin is not in users table
-    user_id = None if session['user_id'] == 0 else session['user_id']
-    cursor.execute("""
-        INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
-        VALUES (%s, %s, %s, TRUE)
-    """, (pet_id, user_id, reply))
-    conn.commit()
+    cursor, conn = get_cursor()
 
-    # Get pet and owner info for email notification
-    cursor.execute("""
-        SELECT pets.name, users.email, users.full_name
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.id = %s
-    """, (pet_id,))
-    pet_info = cursor.fetchone()
+    try:
+        # Insert admin reply as comment
+        # For admin (id=0), set user_id to NULL since admin is not in users table
+        user_id = None if session['user_id'] == 0 else session['user_id']
+        cursor.execute("""
+            INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
+            VALUES (%s, %s, %s, TRUE)
+        """, (pet_id, user_id, reply))
 
-    if pet_info:
-        pet_name = pet_info['name']
-        owner_email = pet_info['email']
-        owner_name = pet_info['full_name']
+        # Get pet and owner info for email notification
+        cursor.execute("""
+            SELECT pets.name, users.email, users.full_name
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.id = %s
+        """, (pet_id,))
+        pet_info = cursor.fetchone()
 
-        # Send email notification to owner
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"Update on your lost pet {pet_name}",
-            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
-            msg['To'] = owner_email
+        conn.commit()
+        db_pool.putconn(conn)
 
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>{app.config['COMPANY_NAME']} - Update on Lost Pet</h1>
-                </div>
-                <div class="content">
-                    <p>Dear {owner_name},</p>
-                    <p>There's an update regarding your lost pet {pet_name}:</p>
-                    <div style="background: #fff; padding: 15px; border-left: 4px solid #FF6B35; margin: 20px 0;">
-                        <strong>Admin Reply:</strong><br>{reply}
+        if pet_info:
+            pet_name = pet_info['name']
+            owner_email = pet_info['email']
+            owner_name = pet_info['full_name']
+
+            # Send email notification to owner
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"Update on your lost pet {pet_name}",
+                msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+                msg['To'] = owner_email
+
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                        .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>{app.config['COMPANY_NAME']} - Update on Lost Pet</h1>
                     </div>
-                    <p>Please check the lost pets page for more details.</p>
-                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
-                </div>
-                <div class="footer">
-                    <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-                </div>
-            </body>
-            </html>
-            """
+                    <div class="content">
+                        <p>Dear {owner_name},</p>
+                        <p>There's an update regarding your lost pet {pet_name}:</p>
+                        <div style="background: #fff; padding: 15px; border-left: 4px solid #FF6B35; margin: 20px 0;">
+                            <strong>Admin Reply:</strong><br>{reply}
+                        </div>
+                        <p>Please check the lost pets page for more details.</p>
+                        <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated message. Please do not reply to this email.</p>
+                        <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                    </div>
+                </body>
+                </html>
+                """
 
-            text_content = f"""
-            {app.config['COMPANY_NAME']} - Update on Lost Pet
+                text_content = f"""
+                {app.config['COMPANY_NAME']} - Update on Lost Pet
 
-            Dear {owner_name},
+                Dear {owner_name},
 
-            There's an update regarding your lost pet {pet_name}:
+                There's an update regarding your lost pet {pet_name}:
 
-            Admin Reply: {reply}
+                Admin Reply: {reply}
 
-            Please check the lost pets page for more details.
+                Please check the lost pets page for more details.
 
-            Best regards,
-            Pila Pets Administration
-            Municipality of Pila, Laguna
+                Best regards,
+                Pila Pets Administration
+                Municipality of Pila, Laguna
 
-            This is an automated message. Please do not reply to this email.
-            """
+                This is an automated message. Please do not reply to this email.
+                """
 
-            part1 = MIMEText(text_content, 'plain')
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part1)
-            msg.attach(part2)
+                part1 = MIMEText(text_content, 'plain')
+                part2 = MIMEText(html_content, 'html')
+                msg.attach(part1)
+                msg.attach(part2)
 
-            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-            server.starttls()
-            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-            server.send_message(msg)
-            server.quit()
+                server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+                server.starttls()
+                server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                server.send_message(msg)
+                server.quit()
 
-            print(f"[SUCCESS] Admin reply notification email sent to {owner_email}")
-        except Exception as e:
-            print(f"[ERROR] Failed to send admin reply email: {e}")
+                print(f"[SUCCESS] Admin reply notification email sent to {owner_email}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send admin reply email: {e}")
 
-    return jsonify({'success': True})
+        return jsonify({'success': True})
+
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        print(f"[ERROR] Error in admin_reply_to_lost_pet: {str(e)}")
+        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'})
 
 @app.route('/admin/approve-comment/<int:comment_id>', methods=['POST'])
 @admin_required
@@ -2442,6 +2554,9 @@ def approve_pet(pet_id):
 
     if pet['status'] != 'pending':
         return jsonify({'success': False, 'message': 'Pet is not pending approval'})
+
+    if pet['deceased']:
+        return jsonify({'success': False, 'message': 'Cannot approve a deceased pet'})
 
     # Update pet status to approved
     # For admin (id=0), set approved_by to NULL since admin is not in users table
@@ -2568,7 +2683,6 @@ def reject_pet(pet_id):
 
         # Update pet status to rejected and store rejection reason
         cursor.execute("UPDATE pets SET status = 'rejected', rejection_reason = %s WHERE id = %s", (rejection_reason, pet_id))
-        conn.commit()
 
         # Send email notification to pet owner
         cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
