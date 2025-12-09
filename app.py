@@ -14,9 +14,10 @@ load_dotenv()
 
 
 
-# Database connection
+# Database connection with connection pooling
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from psycopg2 import pool
 
 # Get Supabase connection URL from environment
 database_url = os.getenv('DATABASE_URL')
@@ -24,33 +25,79 @@ database_url = os.getenv('DATABASE_URL')
 if not database_url:
     raise ValueError("DATABASE_URL environment variable is not set. Please add your Supabase connection URL to the .env file.")
 
-db = psycopg2.connect(database_url, sslmode='require')
-cursor = db.cursor(cursor_factory=RealDictCursor)
+# Create connection pool for better performance
+db_pool = pool.SimpleConnectionPool(
+    minconn=1,
+    maxconn=10,  # Adjust based on your needs
+    dsn=database_url + "?sslmode=require"
+)
+
+
 
 def get_cursor():
-    """Get a database cursor, recreating if closed"""
-    global cursor, db
-    if db.closed:
-        db = psycopg2.connect(database_url, sslmode='require')
-        cursor = db.cursor(cursor_factory=RealDictCursor)
-    elif cursor.closed:
-        cursor = db.cursor(cursor_factory=RealDictCursor)
-    return cursor
+    """Get a database cursor from the connection pool"""
+    global db_pool
+    try:
+        conn = db_pool.getconn()
+        if conn.closed:
+            # Return bad connection to pool and get a new one
+            db_pool.putconn(conn, close=True)
+            conn = db_pool.getconn()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        return cursor, conn
+    except Exception as e:
+        print(f"[ERROR] Failed to get database connection: {e}")
+        raise
 
-# Ensure archived columns exist
-try:
-    get_cursor().execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
-    get_cursor().execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
-    get_cursor().execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
-    get_cursor().execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
-    db.commit()
-    print("Archive columns ensured")
-except Exception as e:
-    print(f"Could not add archive columns: {e}")
-    db.rollback()
+class DatabaseConnection:
+    """Context manager for database connections"""
+    def __init__(self):
+        self.conn = None
+        self.cursor = None
 
+    def __enter__(self):
+        self.conn = db_pool.getconn()
+        if self.conn.closed:
+            db_pool.putconn(self.conn, close=True)
+            self.conn = db_pool.getconn()
+        self.cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+        return self.cursor, self.conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            try:
+                if exc_type:
+                    self.conn.rollback()
+                else:
+                    self.conn.commit()
+            except Exception as e:
+                print(f"[ERROR] Failed to commit/rollback connection: {e}")
+            finally:
+                db_pool.putconn(self.conn)
 
 app = Flask(__name__)
+
+# Flag to ensure schema is only checked once
+schema_checked = False
+
+@app.before_request
+def ensure_schema():
+    """Ensure required database schema exists - runs only once"""
+    global schema_checked
+    if schema_checked:
+        return
+
+    with DatabaseConnection() as (cursor, conn):
+        try:
+            cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+            cursor.execute('ALTER TABLE pets ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+            cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE')
+            cursor.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP NULL')
+            print("Archive columns ensured")
+            schema_checked = True
+        except Exception as e:
+            print(f"Could not add archive columns: {e}")
+            raise
 app.config['SECRET_KEY'] = 'pila-pets-week1-secret-key'
 
 # Email Configuration - Gmail SMTP
@@ -171,8 +218,9 @@ def login():
         password = request.form.get('password')
 
         # Fetch user from database
-        get_cursor().execute("SELECT * FROM users WHERE email = %s", (email,))
-        user = get_cursor().fetchone()
+        with DatabaseConnection() as (cursor, conn):
+            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            user = cursor.fetchone()
 
         if not user and email == 'admin@pila.pets' and password == 'asdf':
             user = {
@@ -244,8 +292,9 @@ def register():
 
         try:
             # [SUCCESS] Check for duplicate email in the database
-            get_cursor().execute("SELECT * FROM users WHERE email = %s", (email,))
-            existing_user = get_cursor().fetchone()
+            with DatabaseConnection() as (cursor, conn):
+                cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+                existing_user = cursor.fetchone()
             if existing_user:
                 flash('Email already registered', 'error')
                 return render_template('auth/register.html')
@@ -298,7 +347,8 @@ def verify_email():
         if entered_code == pending_data['verification_code']:
             try:
                 # Insert new user into MySQL
-                get_cursor().execute("""
+                cursor, conn = get_cursor()
+                cursor.execute("""
                     INSERT INTO users (full_name, age, contact_number, address, email, password, is_admin)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
@@ -310,7 +360,8 @@ def verify_email():
                     pending_data['password'],
                     False
                 ))
-                db.commit()
+                conn.commit()
+                db_pool.putconn(conn)
 
                 # Clear pending registration
                 session.pop('pending_registration', None)
@@ -387,8 +438,11 @@ def admin_required(f):
 
 # Helper function to get user by ID
 def get_user_by_id(user_id):
-    get_cursor().execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    return get_cursor().fetchone()
+    cursor, conn = get_cursor()
+    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    result = cursor.fetchone()
+    db_pool.putconn(conn)
+    return result
 
 # User Routes
 @app.route('/user/dashboard')
@@ -396,8 +450,16 @@ def get_user_by_id(user_id):
 def user_dashboard():
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
-    get_cursor().execute("SELECT * FROM pets WHERE owner_id = %s AND archived = FALSE AND status = 'approved'", (session['user_id'],))
-    user_pets = get_cursor().fetchall()
+
+    # Optimized: Single query with only needed columns
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("""
+            SELECT id, name, category, pet_type, age, color, gender, photo_url, available_for_adoption, lost
+            FROM pets
+            WHERE owner_id = %s AND archived = FALSE AND status = 'approved'
+            ORDER BY registered_on DESC
+        """, (session['user_id'],))
+        user_pets = cursor.fetchall()
 
     return render_template('user/dashboard.html',
                           user_pets=user_pets,
@@ -446,11 +508,13 @@ def register_pet():
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
                 file.save(file_path)
 
-        get_cursor().execute("""
+        cursor, conn = get_cursor()
+        cursor.execute("""
             INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, available_for_adoption, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
         """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, available_for_adoption))
-        db.commit()
+        conn.commit()
+        db_pool.putconn(conn)
 
         flash(f'Pet "{name}" registered successfully and is pending admin approval!', 'success')
         return redirect(url_for('user_dashboard'))
@@ -463,24 +527,25 @@ def pet_details(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
 
-    if not pet or pet['owner_id'] != session['user_id']:
-        flash('Access denied', 'error')
-        return redirect(url_for('user_dashboard'))
+        if not pet or pet['owner_id'] != session['user_id']:
+            flash('Access denied', 'error')
+            return redirect(url_for('user_dashboard'))
 
-    # Get owner info from session
-    owner_info = {
-        'full_name': session['user_name'],
-        'email': session['user_email'],
-        'contact_number': session['user_contact'],
-        'address': session['user_address']
-    }
+        # Get owner info from session
+        owner_info = {
+            'full_name': session['user_name'],
+            'email': session['user_email'],
+            'contact_number': session['user_contact'],
+            'address': session['user_address']
+        }
 
-    # Get medical records from database
-    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
-    pet_medical_records = cursor.fetchall()
+        # Get medical records from database
+        cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+        pet_medical_records = cursor.fetchall()
 
     print(f"[DEBUG] Rendering pet details for pet {pet_id}, photo_url: {pet['photo_url']}")
     if pet['photo_url']:
@@ -500,67 +565,66 @@ def update_pet_photo(pet_id):
 
     try:
         print(f"🔍 Checking pet ownership for pet_id: {pet_id}, user_id: {session['user_id']}")
-        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-        pet = cursor.fetchone()
+        with DatabaseConnection() as (cursor, conn):
+            cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+            pet = cursor.fetchone()
 
-        if not pet:
-            print(f"[ERROR] Pet not found or access denied for pet_id: {pet_id}")
-            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+            if not pet:
+                print(f"[ERROR] Pet not found or access denied for pet_id: {pet_id}")
+                return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
-        print(f"[SUCCESS] Pet found: {pet['name']}")
+            print(f"[SUCCESS] Pet found: {pet['name']}")
 
-        # Handle file upload
-        if 'pet_photo' not in request.files:
-            print("[ERROR] No file part in request")
-            return jsonify({'success': False, 'message': 'No file provided'})
+            # Handle file upload
+            if 'pet_photo' not in request.files:
+                print("[ERROR] No file part in request")
+                return jsonify({'success': False, 'message': 'No file provided'})
 
-        file = request.files['pet_photo']
-        print(f"[FILE] File received: {file.filename if file else 'None'}")
+            file = request.files['pet_photo']
+            print(f"[FILE] File received: {file.filename if file else 'None'}")
 
-        if not file or file.filename == '':
-            print("[ERROR] No file selected")
-            return jsonify({'success': False, 'message': 'No file selected'})
+            if not file or file.filename == '':
+                print("[ERROR] No file selected")
+                return jsonify({'success': False, 'message': 'No file selected'})
 
-        if not allowed_file(file.filename):
-            print(f"[ERROR] Invalid file type: {file.filename}")
-            return jsonify({'success': False, 'message': 'Invalid file type. Please upload PNG, JPG, JPEG, or GIF files.'})
+            if not allowed_file(file.filename):
+                print(f"[ERROR] Invalid file type: {file.filename}")
+                return jsonify({'success': False, 'message': 'Invalid file type. Please upload PNG, JPG, JPEG, or GIF files.'})
 
-        # Generate unique filename
-        filename = secure_filename(file.filename)
-        import time
-        timestamp = str(int(time.time()))
-        name_part, ext = os.path.splitext(filename)
-        photo_filename = f"{name_part}_{timestamp}{ext}"
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
+            # Generate unique filename
+            filename = secure_filename(file.filename)
+            import time
+            timestamp = str(int(time.time()))
+            name_part, ext = os.path.splitext(filename)
+            photo_filename = f"{name_part}_{timestamp}{ext}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_filename)
 
-        print(f"💾 Saving file to: {file_path}")
+            print(f"💾 Saving file to: {file_path}")
 
-        # Ensure upload directory exists
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            # Ensure upload directory exists
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-        # Save the file
-        file.save(file_path)
+            # Save the file
+            file.save(file_path)
 
-        # Verify file was saved
-        if not os.path.exists(file_path):
-            print(f"[ERROR] File was not saved: {file_path}")
-            return jsonify({'success': False, 'message': 'Failed to save file'})
+            # Verify file was saved
+            if not os.path.exists(file_path):
+                print(f"[ERROR] File was not saved: {file_path}")
+                return jsonify({'success': False, 'message': 'Failed to save file'})
 
-        print(f"[SUCCESS] File saved successfully: {photo_filename}")
+            print(f"[SUCCESS] File saved successfully: {photo_filename}")
 
-        # Update pet photo in database
-        print(f"[DB] Updating database for pet_id: {pet_id}")
-        cursor.execute("UPDATE pets SET photo_url = %s WHERE id = %s", (photo_filename, pet_id))
-        db.commit()
+            # Update pet photo in database
+            print(f"[DB] Updating database for pet_id: {pet_id}")
+            cursor.execute("UPDATE pets SET photo_url = %s WHERE id = %s", (photo_filename, pet_id))
 
-        print(f"[SUCCESS] Photo uploaded successfully: {photo_filename}")
-        return jsonify({'success': True, 'message': 'Photo uploaded successfully', 'photo_filename': photo_filename})
+            print(f"[SUCCESS] Photo uploaded successfully: {photo_filename}")
+            return jsonify({'success': True, 'message': 'Photo uploaded successfully', 'photo_filename': photo_filename})
 
     except Exception as e:
         print(f"[ERROR] Error uploading photo: {str(e)}")
         import traceback
         traceback.print_exc()
-        db.rollback()
         return jsonify({'success': False, 'message': 'An error occurred while uploading the photo. Please try again.'})
 
 @app.route('/user/pet/<int:pet_id>/medical-records')
@@ -569,16 +633,17 @@ def medical_records(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
 
-    if not pet:
-        flash('Access denied', 'error')
-        return redirect(url_for('user_dashboard'))
+        if not pet:
+            flash('Access denied', 'error')
+            return redirect(url_for('user_dashboard'))
 
-    # Get medical records from database
-    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
-    pet_medical_records = cursor.fetchall()
+        # Get medical records from database
+        cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+        pet_medical_records = cursor.fetchall()
 
     return render_template('user/medical_records.html', pet=pet, medical_records=pet_medical_records)
 
@@ -588,16 +653,19 @@ def vaccinations(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
+    cursor, conn = get_cursor()
     cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
     pet = cursor.fetchone()
 
     if not pet:
+        db_pool.putconn(conn)
         flash('Access denied', 'error')
         return redirect(url_for('user_dashboard'))
 
     # Get vaccinations from database (stored in medical_records table with record_type = 'Vaccination')
     cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s AND record_type = 'Vaccination' ORDER BY record_date DESC", (pet_id,))
     vaccinations = cursor.fetchall()
+    db_pool.putconn(conn)
 
     return render_template('user/vaccination.html', pet=pet, vaccinations=vaccinations)
 
@@ -607,29 +675,28 @@ def report_lost_pet(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+        if not pet:
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
-    # Get comment from request
-    data = request.get_json()
-    comment = data.get('comment', '').strip() if data else ''
+        # Get comment from request
+        data = request.get_json()
+        comment = data.get('comment', '').strip() if data else ''
 
-    if not comment:
-        return jsonify({'success': False, 'message': 'Please provide details about how your pet was lost'})
+        if not comment:
+            return jsonify({'success': False, 'message': 'Please provide details about how your pet was lost'})
 
-    # Update pet as lost
-    cursor.execute("UPDATE pets SET lost = TRUE WHERE id = %s", (pet_id,))
-    db.commit()
+        # Update pet as lost
+        cursor.execute("UPDATE pets SET lost = TRUE WHERE id = %s", (pet_id,))
 
-    # Insert comment into comments table
-    cursor.execute("""
-        INSERT INTO comments (pet_id, user_id, comment)
-        VALUES (%s, %s, %s)
-    """, (pet_id, session['user_id'], comment))
-    db.commit()
+        # Insert comment into comments table
+        cursor.execute("""
+            INSERT INTO comments (pet_id, user_id, comment)
+            VALUES (%s, %s, %s)
+        """, (pet_id, session['user_id'], comment))
 
     # Send email notification to admin
     try:
@@ -737,29 +804,28 @@ def mark_found_pet(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+        if not pet:
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
-    # Get comment from request
-    data = request.get_json()
-    comment = data.get('comment', '').strip() if data else ''
+        # Get comment from request
+        data = request.get_json()
+        comment = data.get('comment', '').strip() if data else ''
 
-    if not comment:
-        return jsonify({'success': False, 'message': 'Please provide details about how your pet was found'})
+        if not comment:
+            return jsonify({'success': False, 'message': 'Please provide details about how your pet was found'})
 
-    # Update pet as found
-    cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
-    db.commit()
+        # Update pet as found
+        cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
 
-    # Insert comment into comments table
-    cursor.execute("""
-        INSERT INTO comments (pet_id, user_id, comment)
-        VALUES (%s, %s, %s)
-    """, (pet_id, session['user_id'], comment))
-    db.commit()
+        # Insert comment into comments table
+        cursor.execute("""
+            INSERT INTO comments (pet_id, user_id, comment)
+            VALUES (%s, %s, %s)
+        """, (pet_id, session['user_id'], comment))
 
     # Send email notification to admin
     try:
@@ -867,10 +933,12 @@ def report_lost_confirmation(pet_id):
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
 
+    cursor, conn = get_cursor()
     cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
     pet = cursor.fetchone()
 
     if not pet:
+        db_pool.putconn(conn)
         flash('Pet not found or access denied', 'error')
         return redirect(url_for('user_dashboard'))
 
@@ -882,6 +950,7 @@ def report_lost_confirmation(pet_id):
     """, (pet_id, session['user_id']))
     comment_result = cursor.fetchone()
     comment = comment_result['comment'] if comment_result else 'No details provided'
+    db_pool.putconn(conn)
 
     return render_template('user/report_lost_pet.html', pet=pet, comment=comment, datetime=datetime)
 
@@ -890,52 +959,83 @@ def lost_pets():
     # Get search parameters
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '') or 'all'
+    page = int(request.args.get('page', 1))
+    per_page = 15  # Reasonable limit for lost pets page
 
-    # Build base query
-    query = """
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.lost = TRUE AND pets.archived = FALSE AND pets.status = 'approved'
-    """
-    params = []
+    with DatabaseConnection() as (cursor, conn):
+        # Build base query with pagination
+        query = """
+            SELECT p.id, p.name, p.category, p.pet_type, p.age, p.color, p.photo_url,
+                   p.registered_on, p.owner_id, u.full_name AS owner_name, u.email AS owner_email,
+                   u.contact_number AS owner_contact, u.address AS owner_address
+            FROM pets p
+            JOIN users u ON p.owner_id = u.id
+            WHERE p.lost = TRUE AND p.archived = FALSE AND p.status = 'approved'
+        """
+        params = []
 
-    # Add search conditions
-    if search_query:
-        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
-        search_pattern = f"%{search_query}%"
-        params.extend([search_pattern, search_pattern, search_pattern])
+        # Add search conditions
+        if search_query:
+            query += " AND (LOWER(p.name) LIKE LOWER(%s) OR LOWER(p.pet_type) LIKE LOWER(%s) OR LOWER(u.full_name) LIKE LOWER(%s))"
+            search_pattern = f"%{search_query}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
 
-    if category_filter != 'all':
-        query += " AND pets.category = %s"
-        params.append(category_filter)
+        if category_filter != 'all':
+            query += " AND p.category = %s"
+            params.append(category_filter)
 
-    query += " ORDER BY pets.registered_on DESC"
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM ({query}) as subquery"
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()['total']
 
-    cursor.execute(query, params)
-    lost_pets_list = cursor.fetchall()
+        # Add ordering and pagination
+        query += " ORDER BY p.registered_on DESC LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
 
-    # Add flag to indicate if pet belongs to current user
-    for pet in lost_pets_list:
-        pet['is_own_pet'] = 'user_id' in session and pet['owner_id'] == session['user_id']
+        cursor.execute(query, params)
+        lost_pets_list = cursor.fetchall()
 
-    # Get comments for each lost pet
-    for pet in lost_pets_list:
-        cursor.execute("""
-            SELECT comments.*, users.full_name AS commenter_name
-            FROM comments
-            LEFT JOIN users ON comments.user_id = users.id
-            WHERE comments.pet_id = %s
-            ORDER BY comments.created_at DESC
-        """, (pet['id'],))
-        pet['comments'] = cursor.fetchall()
+        # Add flag to indicate if pet belongs to current user
+        user_id = session.get('user_id')
+        for pet in lost_pets_list:
+            pet['is_own_pet'] = user_id is not None and pet['owner_id'] == user_id
 
-    return render_template('lost_pets.html',
-                          lost_pets=lost_pets_list,
-                          datetime=datetime,
-                          search_query=search_query,
-                          category_filter=category_filter)
+        # Get comments for each lost pet - optimized with single query
+        if lost_pets_list:
+            pet_ids = [pet['id'] for pet in lost_pets_list]
+            placeholders = ','.join(['%s'] * len(pet_ids))
+
+            cursor.execute(f"""
+                SELECT c.pet_id, c.comment, c.created_at, u.full_name AS commenter_name
+                FROM comments c
+                LEFT JOIN users u ON c.user_id = u.id
+                WHERE c.pet_id IN ({placeholders})
+                ORDER BY c.created_at DESC
+            """, pet_ids)
+
+            comments_by_pet = {}
+            for comment in cursor.fetchall():
+                pet_id = comment['pet_id']
+                if pet_id not in comments_by_pet:
+                    comments_by_pet[pet_id] = []
+                comments_by_pet[pet_id].append(comment)
+
+            # Attach comments to pets
+            for pet in lost_pets_list:
+                pet['comments'] = comments_by_pet.get(pet['id'], [])
+
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+
+        return render_template('lost_pets.html',
+                              lost_pets=lost_pets_list,
+                              datetime=datetime,
+                              search_query=search_query,
+                              category_filter=category_filter,
+                              page=page,
+                              total_pages=total_pages,
+                              total_count=total_count)
 
 @app.route('/adoption')
 @login_required
@@ -946,38 +1046,65 @@ def adoption():
     # Get search parameters
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '') or 'all'
+    page = int(request.args.get('page', 1))
+    per_page = 12  # Reasonable limit for adoption page
 
-    # Build base query
-    query = """
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-                users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
-        AND pets.owner_id != %s
-    """
-    params = [session['user_id']]
+    cursor, conn = get_cursor()
 
-    # Add search conditions
-    if search_query:
-        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
-        search_pattern = f"%{search_query}%"
-        params.extend([search_pattern, search_pattern, search_pattern])
+    try:
+        # Build base query with pagination
+        query = """
+            SELECT p.id, p.name, p.category, p.pet_type, p.age, p.color, p.photo_url,
+                   p.registered_on, u.full_name AS owner_name, u.email AS owner_email,
+                   u.contact_number AS owner_contact, u.address AS owner_address
+            FROM pets p
+            JOIN users u ON p.owner_id = u.id
+            WHERE p.available_for_adoption = TRUE AND p.lost = FALSE AND p.archived = FALSE AND p.status = 'approved'
+            AND p.owner_id != %s
+        """
+        params = [session['user_id']]
 
-    if category_filter != 'all':
-        query += " AND pets.category = %s"
-        params.append(category_filter)
+        # Add search conditions
+        if search_query:
+            query += " AND (LOWER(p.name) LIKE LOWER(%s) OR LOWER(p.pet_type) LIKE LOWER(%s) OR LOWER(u.full_name) LIKE LOWER(%s))"
+            search_pattern = f"%{search_query}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
 
-    query += " ORDER BY pets.registered_on DESC"
+        if category_filter != 'all':
+            query += " AND p.category = %s"
+            params.append(category_filter)
 
-    cursor.execute(query, params)
-    adoption_pets = cursor.fetchall()
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM ({query}) as subquery"
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()['total']
 
-    return render_template('user/adoption.html',
-                          adoption_pets=adoption_pets,
-                          datetime=datetime,
-                          search_query=search_query,
-                          category_filter=category_filter)
+        # Add ordering and pagination
+        query += " ORDER BY p.registered_on DESC LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
+
+        cursor.execute(query, params)
+        adoption_pets = cursor.fetchall()
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+
+        return render_template('user/adoption.html',
+                              adoption_pets=adoption_pets,
+                              datetime=datetime,
+                              search_query=search_query,
+                              category_filter=category_filter,
+                              page=page,
+                              total_pages=total_pages,
+                              total_count=total_count)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/express-adoption-interest/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1150,7 +1277,7 @@ def add_comment(pet_id):
         INSERT INTO comments (pet_id, user_id, comment)
         VALUES (%s, %s, %s)
     """, (pet_id, user_id, comment_text.strip()))
-    db.commit()
+    conn.commit()
 
     # Send email notification to admin
     try:
@@ -1260,13 +1387,15 @@ def edit_profile():
 
         full_name = f"{first_name} {last_name}"
 
+        cursor, conn = get_cursor()
         try:
             cursor.execute("""
                 UPDATE users
                 SET full_name = %s, age = %s, contact_number = %s, address = %s
                 WHERE id = %s
             """, (full_name, age, contact_number, address, session['user_id']))
-            db.commit()
+            conn.commit()
+            db_pool.putconn(conn)
 
             # Update session data
             session['user_name'] = full_name
@@ -1279,12 +1408,25 @@ def edit_profile():
 
         except Exception as e:
             print("[ERROR] ERROR:", e)
-            db.rollback()
+            if 'conn' in locals():
+                conn.rollback()
+                db_pool.putconn(conn)
             flash('An error occurred while updating your profile. Please try again.', 'error')
 
     # Get current user data
-    cursor.execute("SELECT * FROM users WHERE id = %s", (session['user_id'],))
-    user = cursor.fetchone()
+    cursor, conn = get_cursor()
+    try:
+        cursor.execute("SELECT * FROM users WHERE id = %s", (session['user_id'],))
+        user = cursor.fetchone()
+        conn.commit()
+        db_pool.putconn(conn)
+    except Exception as e:
+        print("[ERROR] ERROR:", e)
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        flash('An error occurred while loading your profile. Please try again.', 'error')
+        return redirect(url_for('user_dashboard'))
 
     return render_template('user/edit_profile.html', user=user)
 
@@ -1359,7 +1501,6 @@ def edit_pet(pet_id):
                 SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, available_for_adoption = %s, photo_url = %s
                 WHERE id = %s AND owner_id = %s
             """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_filename, pet_id, session['user_id']))
-            db.commit()
 
             # Verify the update
             cursor.execute("SELECT photo_url FROM pets WHERE id = %s", (pet_id,))
@@ -1407,7 +1548,7 @@ def add_vaccination(pet_id):
         INSERT INTO medical_records (record_type, record_date, next_due_date, provider, description, pet_id)
         VALUES (%s, %s, %s, %s, %s, %s)
     """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by if administered_by else None, notes if notes else None, pet_id))
-    db.commit()
+    conn.commit()
 
     return jsonify({'success': True, 'message': 'Vaccination record added successfully'})
 
@@ -1417,19 +1558,30 @@ def toggle_pet_adoption(pet_id):
     if session.get('is_admin'):
         return jsonify({'success': False, 'message': 'Access denied'})
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-    pet = cursor.fetchone()
+    cursor, conn = get_cursor()
+    try:
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
+        pet = cursor.fetchone()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found or access denied'})
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet not found or access denied'})
 
-    data = request.get_json()
-    available_for_adoption = data.get('available_for_adoption', False)
+        data = request.get_json()
+        available_for_adoption = data.get('available_for_adoption', False)
 
-    cursor.execute("UPDATE pets SET available_for_adoption = %s WHERE id = %s", (available_for_adoption, pet_id))
-    db.commit()
+        cursor.execute("UPDATE pets SET available_for_adoption = %s WHERE id = %s", (available_for_adoption, pet_id))
+        conn.commit()
+        db_pool.putconn(conn)
 
-    return jsonify({'success': True, 'message': f'Pet {"put up for adoption" if available_for_adoption else "removed from adoption"} successfully'})
+        return jsonify({'success': True, 'message': f'Pet {"put up for adoption" if available_for_adoption else "removed from adoption"} successfully'})
+    except Exception as e:
+        print(f"[ERROR] Error toggling pet adoption: {e}")
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        return jsonify({'success': False, 'message': 'An error occurred while updating adoption status.'})
 
 @app.route('/user/add-medical-record/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1470,7 +1622,7 @@ def add_medical_record(pet_id):
         INSERT INTO medical_records (record_type, record_date, next_due_date, provider, description, photo_url, pet_id)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (vaccine_name, date_administered, next_due_date if next_due_date else None, administered_by if administered_by else None, notes if notes else None, photo_filename, pet_id))
-    db.commit()
+    conn.commit()
 
     return jsonify({'success': True, 'message': 'Vaccination record added successfully'})
 
@@ -1479,71 +1631,87 @@ def add_medical_record(pet_id):
 @login_required
 @admin_required
 def admin_dashboard():
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE archived = FALSE AND status = 'approved'")
-    total_pets = cursor.fetchone()['total']
+    cursor, conn = get_cursor()
 
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE lost = TRUE AND archived = FALSE AND status = 'approved'")
-    lost_pets_count = cursor.fetchone()['total']
+    try:
+        # Optimized: Combine multiple COUNT queries into a single query with conditional aggregation
+        cursor.execute("""
+            SELECT
+                COUNT(CASE WHEN archived = FALSE AND status = 'approved' THEN 1 END) as total_pets,
+                COUNT(CASE WHEN lost = TRUE AND archived = FALSE AND status = 'approved' THEN 1 END) as lost_pets_count,
+                COUNT(CASE WHEN status = 'pending' AND archived = FALSE THEN 1 END) as pending_pets_count,
+                COUNT(CASE WHEN available_for_adoption = TRUE AND archived = FALSE AND status = 'approved' THEN 1 END) as adoption_count
+            FROM pets
+        """)
+        pet_stats = cursor.fetchone()
 
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE status = 'pending' AND archived = FALSE")
-    pending_pets_count = cursor.fetchone()['total']
+        # Get comments count more efficiently
+        cursor.execute("""
+            SELECT COUNT(*) AS total
+            FROM comments c
+            WHERE EXISTS (SELECT 1 FROM pets p WHERE p.id = c.pet_id AND p.archived = FALSE)
+        """)
+        new_comments_count = cursor.fetchone()['total']
 
-    cursor.execute("SELECT COUNT(*) AS total FROM comments WHERE pet_id IN (SELECT id FROM pets WHERE archived = FALSE)")
-    new_comments_count = cursor.fetchone()['total']
+        # Get user statistics
+        cursor.execute("SELECT COUNT(*) AS total FROM users WHERE archived = FALSE")
+        total_users = cursor.fetchone()['total']
 
-    # Get pet registrations per month (last 12 months)
-    cursor.execute("""
-        SELECT
-            TO_CHAR(registered_on, 'YYYY-MM') as month,
-            COUNT(*) as count
-        FROM pets
-        WHERE archived = FALSE AND status = 'approved' AND registered_on >= CURRENT_DATE - INTERVAL '12 months'
-        GROUP BY TO_CHAR(registered_on, 'YYYY-MM')
-        ORDER BY TO_CHAR(registered_on, 'YYYY-MM')
-    """)
-    monthly_registrations = cursor.fetchall()
+        # Optimized monthly registrations query - use date truncation instead of TO_CHAR for better performance
+        cursor.execute("""
+            SELECT
+                DATE_TRUNC('month', registered_on) as month,
+                COUNT(*) as count
+            FROM pets
+            WHERE archived = FALSE AND status = 'approved'
+                AND registered_on >= CURRENT_DATE - INTERVAL '12 months'
+            GROUP BY DATE_TRUNC('month', registered_on)
+            ORDER BY DATE_TRUNC('month', registered_on)
+        """)
+        monthly_registrations = cursor.fetchall()
 
-    # Get pet type distribution
-    cursor.execute("""
-        SELECT
-            COALESCE(category, 'Other') as category,
-            COUNT(*) as count
-        FROM pets
-        WHERE archived = FALSE AND status = 'approved'
-        GROUP BY category
-        ORDER BY count DESC
-    """)
-    pet_type_distribution = cursor.fetchall()
+        # Optimized pet type distribution - combine with other stats if needed
+        cursor.execute("""
+            SELECT
+                COALESCE(category, 'Other') as category,
+                COUNT(*) as count
+            FROM pets
+            WHERE archived = FALSE AND status = 'approved'
+            GROUP BY category
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        pet_type_distribution = cursor.fetchall()
 
-    # Get adoption statistics
-    cursor.execute("SELECT COUNT(*) AS total FROM pets WHERE available_for_adoption = TRUE AND archived = FALSE AND status = 'approved'")
-    adoption_count = cursor.fetchone()['total']
+        # Get recent pets with optimized join
+        cursor.execute("""
+            SELECT p.id, p.name, p.category, p.pet_type, p.photo_url, p.registered_on, u.full_name AS owner_name
+            FROM pets p
+            JOIN users u ON u.id = p.owner_id
+            WHERE p.archived = FALSE AND p.status = 'approved'
+            ORDER BY p.registered_on DESC
+            LIMIT 5
+        """)
+        recent_pets_with_owners = cursor.fetchall()
 
-    # Get user statistics
-    cursor.execute("SELECT COUNT(*) AS total FROM users WHERE archived = FALSE")
-    total_users = cursor.fetchone()['total']
+        conn.commit()
+        db_pool.putconn(conn)
 
-    # Get recent non-archived approved pets with owner information
-    cursor.execute("""
-    SELECT pets.*, users.full_name AS owner_name
-    FROM pets
-    JOIN users ON users.id = pets.owner_id
-    WHERE pets.archived = FALSE AND pets.status = 'approved'
-    ORDER BY pets.registered_on DESC
-    LIMIT 5
-""")
-    recent_pets_with_owners = cursor.fetchall()
-
-    return render_template('admin/dashboard.html',
-                          total_pets=total_pets,
-                          lost_pets_count=lost_pets_count,
-                          pending_pets_count=pending_pets_count,
-                          new_comments_count=new_comments_count,
-                          monthly_registrations=monthly_registrations,
-                          pet_type_distribution=pet_type_distribution,
-                          adoption_count=adoption_count,
-                          total_users=total_users,
-                          pets=recent_pets_with_owners)
+        return render_template('admin/dashboard.html',
+                              total_pets=pet_stats['total_pets'],
+                              lost_pets_count=pet_stats['lost_pets_count'],
+                              pending_pets_count=pet_stats['pending_pets_count'],
+                              new_comments_count=new_comments_count,
+                              monthly_registrations=monthly_registrations,
+                              pet_type_distribution=pet_type_distribution,
+                              adoption_count=pet_stats['adoption_count'],
+                              total_users=total_users,
+                              pets=recent_pets_with_owners)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/pets')
 @login_required
@@ -1553,60 +1721,111 @@ def admin_pets():
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '') or 'all'
     status_filter = request.args.get('status', '') or 'all'
+    page = int(request.args.get('page', 1))
+    per_page = 15  # Show 15 pets per page
 
-    # Build base query
-    query = """
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-            users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.archived = FALSE AND pets.status = 'approved'
-    """
-    params = []
+    conn = None
+    cursor = None
+    try:
+        # Get database connection from pool
+        cursor, conn = get_cursor()
 
-    # Add search conditions
-    if search_query:
-        query += " AND (LOWER(pets.name) LIKE LOWER(%s) OR LOWER(pets.pet_type) LIKE LOWER(%s) OR LOWER(users.full_name) LIKE LOWER(%s))"
-        search_pattern = f"%{search_query}%"
-        params.extend([search_pattern, search_pattern, search_pattern])
+        # Build base query with pagination
+        query = """
+            SELECT p.id, p.name, p.category, p.pet_type, p.age, p.color, p.gender,
+                   p.photo_url, p.available_for_adoption, p.lost, p.registered_on,
+                   u.full_name AS owner_name, u.email AS owner_email,
+                   u.contact_number AS owner_contact, u.address AS owner_address
+            FROM pets p
+            JOIN users u ON p.owner_id = u.id
+            WHERE p.archived = FALSE AND p.status = 'approved'
+        """
+        params = []
 
-    if category_filter != 'all':
-        query += " AND pets.category = %s"
-        params.append(category_filter)
+        # Add search conditions
+        if search_query:
+            query += " AND (LOWER(p.name) LIKE LOWER(%s) OR LOWER(p.pet_type) LIKE LOWER(%s) OR LOWER(u.full_name) LIKE LOWER(%s))"
+            search_pattern = f"%{search_query}%"
+            params.extend([search_pattern, search_pattern, search_pattern])
 
-    if status_filter == 'lost':
-        query += " AND pets.lost = TRUE"
-    elif status_filter == 'safe':
-        query += " AND pets.lost = FALSE"
+        if category_filter != 'all':
+            query += " AND p.category = %s"
+            params.append(category_filter)
 
-    query += " ORDER BY pets.registered_on DESC"
+        if status_filter == 'lost':
+            query += " AND p.lost = TRUE"
+        elif status_filter == 'safe':
+            query += " AND p.lost = FALSE"
 
-    cursor.execute(query, params)
-    pets_with_owners = cursor.fetchall()
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM ({query}) as subquery"
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()['total']
 
-    return render_template('admin/pets.html',
-                          pets=pets_with_owners,
-                          datetime=datetime,
-                          search_query=search_query,
-                          category_filter=category_filter,
-                          status_filter=status_filter)
+        # Add ordering and pagination
+        query += " ORDER BY p.registered_on DESC LIMIT %s OFFSET %s"
+        params.extend([per_page, (page - 1) * per_page])
+
+        cursor.execute(query, params)
+        pets_with_owners = cursor.fetchall()
+
+        conn.commit()
+
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+
+        # Calculate display range for template
+        start_item = (page - 1) * per_page + 1
+        end_item = min(page * per_page, total_count)
+
+        return render_template('admin/pets.html',
+                              pets=pets_with_owners,
+                              datetime=datetime,
+                              search_query=search_query,
+                              category_filter=category_filter,
+                              status_filter=status_filter,
+                              page=page,
+                              total_pages=total_pages,
+                              total_count=total_count,
+                              per_page=per_page,
+                              start_item=start_item,
+                              end_item=end_item)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        # Always return the connection to the pool if it was obtained
+        if conn:
+            db_pool.putconn(conn)
 
 @app.route('/admin/users')
 @login_required
 @admin_required
 def admin_users():
-    # Get all non-archived users with pet count
-    cursor.execute("""
-        SELECT users.*, COUNT(pets.id) AS pet_count
-        FROM users
-        LEFT JOIN pets ON users.id = pets.owner_id AND pets.archived = FALSE AND pets.status = 'approved'
-        WHERE users.archived = FALSE
-        GROUP BY users.id
-        ORDER BY users.id
-    """)
-    users_with_pet_count = cursor.fetchall()
+    cursor, conn = get_cursor()
 
-    return render_template('admin/users.html', users=users_with_pet_count)
+    try:
+        # Get all non-archived users with pet count
+        cursor.execute("""
+            SELECT users.*, COUNT(pets.id) AS pet_count
+            FROM users
+            LEFT JOIN pets ON users.id = pets.owner_id AND pets.archived = FALSE AND pets.status = 'approved'
+            WHERE users.archived = FALSE
+            GROUP BY users.id
+            ORDER BY users.id
+        """)
+        users_with_pet_count = cursor.fetchall()
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/users.html', users=users_with_pet_count)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 
 
@@ -1615,6 +1834,7 @@ def admin_users():
 @login_required
 @admin_required
 def archive_pet(pet_id):
+    cursor, conn = get_cursor()
     try:
         # Get pet data with owner information
         cursor.execute("""
@@ -1626,6 +1846,8 @@ def archive_pet(pet_id):
         pet = cursor.fetchone()
 
         if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
             return jsonify({'success': False, 'message': 'Pet not found'})
 
         pet_name = pet['name']
@@ -1634,10 +1856,13 @@ def archive_pet(pet_id):
 
         # Archive pet and set archived timestamp
         cursor.execute("UPDATE pets SET archived = TRUE, archived_at = NOW() WHERE id = %s", (pet_id,))
-        db.commit()
+        conn.commit()
+        db_pool.putconn(conn)
     except Exception as e:
         print(f"Error archiving pet: {e}")
-        db.rollback()
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
         return jsonify({'success': False, 'message': f'Database error: {str(e)}'})
 
     # Send email notification to pet owner
@@ -1714,52 +1939,76 @@ def archive_pet(pet_id):
 @login_required
 @admin_required
 def bulk_update_pets():
-    data = request.get_json()
-    pet_ids = data.get('pet_ids', [])
-    action = data.get('action')
-    value = data.get('value')
+    cursor, conn = get_cursor()
 
-    if not pet_ids or not action:
-        return jsonify({'success': False, 'message': 'Invalid request data'})
+    try:
+        data = request.get_json()
+        pet_ids = data.get('pet_ids', [])
+        action = data.get('action')
+        value = data.get('value')
 
-    if action == 'mark_lost':
-        cursor.execute(f"UPDATE pets SET lost = TRUE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
-    elif action == 'mark_found':
-        cursor.execute(f"UPDATE pets SET lost = FALSE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
-    elif action == 'change_category':
-        if not value or value not in ['Dog', 'Cat', 'Other']:
-            return jsonify({'success': False, 'message': 'Invalid category'})
-        cursor.execute(f"UPDATE pets SET category = %s WHERE id IN ({','.join(['%s'] * len(pet_ids))})", [value] + pet_ids)
-    else:
-        return jsonify({'success': False, 'message': 'Invalid action'})
+        if not pet_ids or not action:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Invalid request data'})
 
-    db.commit()
-    return jsonify({'success': True, 'message': f'Bulk update completed successfully'})
+        if action == 'mark_lost':
+            cursor.execute(f"UPDATE pets SET lost = TRUE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
+        elif action == 'mark_found':
+            cursor.execute(f"UPDATE pets SET lost = FALSE WHERE id IN ({','.join(['%s'] * len(pet_ids))})", pet_ids)
+        elif action == 'change_category':
+            if not value or value not in ['Dog', 'Cat', 'Other']:
+                conn.commit()
+                db_pool.putconn(conn)
+                return jsonify({'success': False, 'message': 'Invalid category'})
+            cursor.execute(f"UPDATE pets SET category = %s WHERE id IN ({','.join(['%s'] * len(pet_ids))})", [value] + pet_ids)
+        else:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Invalid action'})
+
+        conn.commit()
+        db_pool.putconn(conn)
+        return jsonify({'success': True, 'message': f'Bulk update completed successfully'})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/archive-user/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
 def archive_user(user_id):
+    cursor, conn = get_cursor()
+
     try:
         # Get user data
         cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
 
         if not user:
+            conn.commit()
+            db_pool.putconn(conn)
             return jsonify({'success': False, 'message': 'User not found'})
 
         if user['is_admin']:
+            conn.commit()
+            db_pool.putconn(conn)
             return jsonify({'success': False, 'message': 'Cannot archive admin user'})
 
         # Archive user and set archived timestamp
         cursor.execute("UPDATE users SET archived = TRUE, archived_at = NOW() WHERE id = %s", (user_id,))
-        db.commit()
+        conn.commit()
+        db_pool.putconn(conn)
 
         flash(f'User "{user["full_name"]}" has been archived successfully', 'success')
         return jsonify({'success': True, 'message': 'User archived successfully'})
     except Exception as e:
         print(f"Error archiving user: {e}")
-        db.rollback()
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
         return jsonify({'success': False, 'message': f'Database error: {str(e)}'})
 
 @app.route('/admin/archived-users')
@@ -1783,64 +2032,97 @@ def admin_archived_users():
 @login_required
 @admin_required
 def admin_archived():
-    # Get all archived pets with owner information
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-            users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.archived = TRUE
-        ORDER BY pets.archived_at DESC
-    """)
-    archived_pets = cursor.fetchall()
+    cursor, conn = get_cursor()
 
-    # Get all archived users with pet count
-    cursor.execute("""
-        SELECT users.*, COUNT(pets.id) AS pet_count
-        FROM users
-        LEFT JOIN pets ON users.id = pets.owner_id
-        WHERE users.archived = TRUE
-        GROUP BY users.id
-        ORDER BY users.archived_at DESC
-    """)
-    archived_users = cursor.fetchall()
+    try:
+        # Get all archived pets with owner information
+        cursor.execute("""
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.archived = TRUE
+            ORDER BY pets.archived_at DESC
+        """)
+        archived_pets = cursor.fetchall()
 
-    return render_template('admin/archived.html', pets=archived_pets, users=archived_users, datetime=datetime)
+        # Get all archived users with pet count
+        cursor.execute("""
+            SELECT users.*, COUNT(pets.id) AS pet_count
+            FROM users
+            LEFT JOIN pets ON users.id = pets.owner_id
+            WHERE users.archived = TRUE
+            GROUP BY users.id
+            ORDER BY users.archived_at DESC
+        """)
+        archived_users = cursor.fetchall()
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/archived.html', pets=archived_pets, users=archived_users, datetime=datetime)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/archived-pets')
 @login_required
 @admin_required
 def admin_archived_pets():
-    # Get all archived pets with owner information
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-            users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.archived = TRUE
-        ORDER BY pets.archived_at DESC
-    """)
-    archived_pets = cursor.fetchall()
+    cursor, conn = get_cursor()
 
-    return render_template('admin/archived_pets.html', pets=archived_pets, datetime=datetime)
+    try:
+        # Get all archived pets with owner information
+        cursor.execute("""
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.archived = TRUE
+            ORDER BY pets.archived_at DESC
+        """)
+        archived_pets = cursor.fetchall()
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/archived_pets.html', pets=archived_pets, datetime=datetime)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/restore-user/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
 def restore_user(user_id):
-    # Get user data
-    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    user = cursor.fetchone()
+    cursor, conn = get_cursor()
 
-    if not user:
-        return jsonify({'success': False, 'message': 'User not found'})
+    try:
+        # Get user data
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
 
-    # Restore user
-    cursor.execute("UPDATE users SET archived = FALSE, archived_at = NULL WHERE id = %s", (user_id,))
-    db.commit()
+        if not user:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'User not found'})
 
-    flash(f'User "{user["full_name"]}" has been restored successfully', 'success')
-    return jsonify({'success': True, 'message': 'User restored successfully'})
+        # Restore user
+        cursor.execute("UPDATE users SET archived = FALSE, archived_at = NULL WHERE id = %s", (user_id,))
+        conn.commit()
+        db_pool.putconn(conn)
+
+        flash(f'User "{user["full_name"]}" has been restored successfully', 'success')
+        return jsonify({'success': True, 'message': 'User restored successfully'})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/restore-pet/<int:pet_id>', methods=['POST'])
 @login_required
@@ -1855,7 +2137,7 @@ def restore_pet(pet_id):
 
     # Restore pet
     cursor.execute("UPDATE pets SET archived = FALSE, archived_at = NULL WHERE id = %s", (pet_id,))
-    db.commit()
+    conn.commit()
 
     flash(f'Pet "{pet["name"]}" has been restored successfully', 'success')
     return jsonify({'success': True, 'message': 'Pet restored successfully'})
@@ -1863,44 +2145,55 @@ def restore_pet(pet_id):
 @app.route('/admin/lost-pets')
 @admin_required
 def admin_lost_pets():
-    # Get all non-archived lost pets with owner information and comments
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.lost = TRUE AND pets.archived = FALSE
-        ORDER BY pets.registered_on DESC
-    """)
-    lost_pets = cursor.fetchall()
+    cursor, conn = get_cursor()
 
-    # Get comments for each lost pet
-    for pet in lost_pets:
+    try:
+        # Get all non-archived lost pets with owner information and comments
         cursor.execute("""
-            SELECT comments.*, users.full_name AS commenter_name
-            FROM comments
-            LEFT JOIN users ON comments.user_id = users.id
-            WHERE comments.pet_id = %s
-            ORDER BY comments.created_at DESC
-        """, (pet['id'],))
-        pet['comments'] = cursor.fetchall()
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                   users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.lost = TRUE AND pets.archived = FALSE
+            ORDER BY pets.registered_on DESC
+        """)
+        lost_pets = cursor.fetchall()
 
-    # Get statistics
-    cursor.execute("SELECT COUNT(*) AS total FROM comments WHERE pet_id IN (SELECT id FROM pets WHERE archived = FALSE)")
-    total_comments = cursor.fetchone()['total']
+        # Get comments for each lost pet
+        for pet in lost_pets:
+            cursor.execute("""
+                SELECT comments.*, users.full_name AS commenter_name
+                FROM comments
+                LEFT JOIN users ON comments.user_id = users.id
+                WHERE comments.pet_id = %s
+                ORDER BY comments.created_at DESC
+            """, (pet['id'],))
+            pet['comments'] = cursor.fetchall()
 
-    # Get recent reports (last 7 days)
-    cursor.execute("""
-        SELECT COUNT(*) AS total FROM pets
-        WHERE lost = TRUE AND archived = FALSE AND registered_on >= NOW() - INTERVAL '7 days'
-    """)
-    recent_reports = cursor.fetchone()['total']
+        # Get statistics
+        cursor.execute("SELECT COUNT(*) AS total FROM comments WHERE pet_id IN (SELECT id FROM pets WHERE archived = FALSE)")
+        total_comments = cursor.fetchone()['total']
 
-    return render_template('admin/lost_pets.html',
-                          lost_pets=lost_pets,
-                          total_comments=total_comments,
-                          recent_reports=recent_reports,
-                          datetime=datetime)
+        # Get recent reports (last 7 days)
+        cursor.execute("""
+            SELECT COUNT(*) AS total FROM pets
+            WHERE lost = TRUE AND archived = FALSE AND registered_on >= NOW() - INTERVAL '7 days'
+        """)
+        recent_reports = cursor.fetchone()['total']
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/lost_pets.html',
+                              lost_pets=lost_pets,
+                              total_comments=total_comments,
+                              recent_reports=recent_reports,
+                              datetime=datetime)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/mark-pet-found/<int:pet_id>', methods=['POST'])
 @admin_required
@@ -1908,106 +2201,105 @@ def mark_pet_found(pet_id):
     data = request.get_json()
     note = data.get('note', '').strip() if data else ''
 
-    # Update pet as found
-    cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
-    db.commit()
+    with DatabaseConnection() as (cursor, conn):
+        # Update pet as found
+        cursor.execute("UPDATE pets SET lost = FALSE WHERE id = %s", (pet_id,))
 
-    # Get pet and owner info for email
-    cursor.execute("""
-        SELECT pets.name, users.email, users.full_name
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.id = %s
-    """, (pet_id,))
-    pet_info = cursor.fetchone()
+        # Get pet and owner info for email
+        cursor.execute("""
+            SELECT pets.name, users.email, users.full_name
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.id = %s
+        """, (pet_id,))
+        pet_info = cursor.fetchone()
 
-    if pet_info:
-        pet_name = pet_info['name']
-        owner_email = pet_info['email']
-        owner_name = pet_info['full_name']
+        if pet_info:
+            pet_name = pet_info['name']
+            owner_email = pet_info['email']
+            owner_name = pet_info['full_name']
 
-        # Send email notification to owner
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"Good News! Your pet {pet_name} has been found",
-            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
-            msg['To'] = owner_email
+            # Send email notification to owner
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"Good News! Your pet {pet_name} has been found",
+                msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+                msg['To'] = owner_email
 
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>{app.config['COMPANY_NAME']} - Pet Found!</h1>
-                </div>
-                <div class="content">
-                    <p>Dear {owner_name},</p>
-                    <p>Great news! Your lost pet {pet_name} has been marked as found in our system.</p>
-                    {("<p><strong>Admin Note:</strong> " + note + "</p>") if note else ""}
-                    <p>Please contact the Pila Pets administration for more details about the reunion process.</p>
-                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
-                </div>
-                <div class="footer">
-                    <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-                </div>
-            </body>
-            </html>
-            """
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                        .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>{app.config['COMPANY_NAME']} - Pet Found!</h1>
+                    </div>
+                    <div class="content">
+                        <p>Dear {owner_name},</p>
+                        <p>Great news! Your lost pet {pet_name} has been marked as found in our system.</p>
+                        {("<p><strong>Admin Note:</strong> " + note + "</p>") if note else ""}
+                        <p>Please contact the Pila Pets administration for more details about the reunion process.</p>
+                        <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated message. Please do not reply to this email.</p>
+                        <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                    </div>
+                </body>
+                </html>
+                """
 
-            text_content = f"""
-            {app.config['COMPANY_NAME']} - Pet Found!
+                text_content = f"""
+                {app.config['COMPANY_NAME']} - Pet Found!
 
-            Dear {owner_name},
+                Dear {owner_name},
 
-            Great news! Your lost pet {pet_name} has been marked as found in our system.
+                Great news! Your lost pet {pet_name} has been marked as found in our system.
 
-            {("Admin Note: " + note) if note else ""}
+                {("Admin Note: " + note) if note else ""}
 
-            Please contact the Pila Pets administration for more details about the reunion process.
+                Please contact the Pila Pets administration for more details about the reunion process.
 
-            Best regards,
-            Pila Pets Administration
-            Municipality of Pila, Laguna
+                Best regards,
+                Pila Pets Administration
+                Municipality of Pila, Laguna
 
-            This is an automated message. Please do not reply to this email.
-            """
+                This is an automated message. Please do not reply to this email.
+                """
 
-            part1 = MIMEText(text_content, 'plain')
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part1)
-            msg.attach(part2)
+                part1 = MIMEText(text_content, 'plain')
+                part2 = MIMEText(html_content, 'html')
+                msg.attach(part1)
+                msg.attach(part2)
 
-            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-            server.starttls()
-            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-            server.send_message(msg)
-            server.quit()
+                server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+                server.starttls()
+                server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                server.send_message(msg)
+                server.quit()
 
-            print(f"[SUCCESS] Found pet notification email sent to {owner_email}")
-        except Exception as e:
-            print(f"[ERROR] Failed to send found pet email: {e}")
+                print(f"[SUCCESS] Found pet notification email sent to {owner_email}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send found pet email: {e}")
 
-        # Add admin note as comment if provided
-        if note:
-            # For admin (id=0), set user_id to NULL since admin is not in users table
-            user_id = None if session['user_id'] == 0 else session['user_id']
-            cursor.execute("""
-                INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
-                VALUES (%s, %s, %s, TRUE)
-            """, (pet_id, user_id, f"ADMIN NOTE: {note}",))
-            db.commit()
+            # Add admin note as comment if provided
+            if note:
+                # For admin (id=0), set user_id to NULL since admin is not in users table
+                user_id = None if session['user_id'] == 0 else session['user_id']
+                cursor.execute("""
+                    INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
+                    VALUES (%s, %s, %s, TRUE)
+                """, (pet_id, user_id, f"ADMIN NOTE: {note}",))
 
-    flash(f'Pet "{pet_info["name"] if pet_info else "Unknown"}" has been marked as found.', 'success')
-    return jsonify({'success': True})
+        flash(f'Pet "{pet_info["name"] if pet_info else "Unknown"}" has been marked as found.', 'success')
+        return jsonify({'success': True})
 
 @app.route('/admin/lost-pet/<int:pet_id>/reply', methods=['POST'])
 @admin_required
@@ -2024,7 +2316,7 @@ def admin_reply_to_lost_pet(pet_id):
         INSERT INTO comments (pet_id, user_id, comment, is_admin_reply)
         VALUES (%s, %s, %s, TRUE)
     """, (pet_id, user_id, reply))
-    db.commit()
+    conn.commit()
 
     # Get pet and owner info for email notification
     cursor.execute("""
@@ -2125,10 +2417,19 @@ def approve_comment(comment_id):
 @app.route('/admin/delete-comment/<int:comment_id>', methods=['POST'])
 @admin_required
 def delete_comment(comment_id):
-    cursor.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
-    db.commit()
+    cursor, conn = get_cursor()
 
-    return jsonify({'success': True})
+    try:
+        cursor.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return jsonify({'success': True})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/approve-pet/<int:pet_id>', methods=['POST'])
 @admin_required
@@ -2150,7 +2451,6 @@ def approve_pet(pet_id):
         SET status = 'approved', approved_at = NOW(), approved_by = %s
         WHERE id = %s
     """, (approved_by, pet_id))
-    db.commit()
 
     # Send email notification to pet owner
     cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
@@ -2242,156 +2542,275 @@ def approve_pet(pet_id):
 @app.route('/admin/reject-pet/<int:pet_id>', methods=['POST'])
 @admin_required
 def reject_pet(pet_id):
-    data = request.get_json()
-    rejection_reason = data.get('rejection_reason', '').strip() if data else ''
+    cursor, conn = get_cursor()
 
-    if not rejection_reason:
-        return jsonify({'success': False, 'message': 'Please provide a reason for rejection'})
+    try:
+        data = request.get_json()
+        rejection_reason = data.get('rejection_reason', '').strip() if data else ''
 
-    cursor.execute("SELECT * FROM pets WHERE id = %s", (pet_id,))
-    pet = cursor.fetchone()
+        if not rejection_reason:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Please provide a reason for rejection'})
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found'})
+        cursor.execute("SELECT * FROM pets WHERE id = %s", (pet_id,))
+        pet = cursor.fetchone()
 
-    if pet['status'] != 'pending':
-        return jsonify({'success': False, 'message': 'Pet is not pending approval'})
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet not found'})
 
-    # Update pet status to rejected and store rejection reason
-    cursor.execute("UPDATE pets SET status = 'rejected', rejection_reason = %s WHERE id = %s", (rejection_reason, pet_id))
-    db.commit()
+        if pet['status'] != 'pending':
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet is not pending approval'})
 
-    # Send email notification to pet owner
-    cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
-    owner = cursor.fetchone()
+        # Update pet status to rejected and store rejection reason
+        cursor.execute("UPDATE pets SET status = 'rejected', rejection_reason = %s WHERE id = %s", (rejection_reason, pet_id))
+        conn.commit()
 
-    if owner:
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"Pet Registration Update: {pet['name']}",
-            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
-            msg['To'] = owner['email']
+        # Send email notification to pet owner
+        cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
+        owner = cursor.fetchone()
 
-            html_content = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-                    .header { background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-                    .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }
-                    .footer { margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>""" + app.config['COMPANY_NAME'] + """ - Pet Registration Update</h1>
-                </div>
-                <div class="content">
-                    <p>Dear """ + owner['full_name'] + """,</p>
-                    <p>We regret to inform you that your pet registration for <strong>""" + pet['name'] + """</strong> has been reviewed and was not approved at this time.</p>
-                    <p><strong>Reason for rejection:</strong></p>
-                    <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
-                        """ + rejection_reason + """
+        if owner:
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"Pet Registration Update: {pet['name']}",
+                msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+                msg['To'] = owner['email']
+
+                html_content = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+                        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }
+                        .footer { margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>""" + app.config['COMPANY_NAME'] + """ - Pet Registration Update</h1>
                     </div>
-                    <p>You may submit a new registration with corrected information. Please contact our administration if you have any questions about this decision.</p>
-                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
-                </div>
-                <div class="footer">
-                    <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>&copy; 2024 """ + app.config['COMPANY_NAME'] + """. All rights reserved.</p>
-                </div>
-            </body>
-            </html>
-            """
+                    <div class="content">
+                        <p>Dear """ + owner['full_name'] + """,</p>
+                        <p>We regret to inform you that your pet registration for <strong>""" + pet['name'] + """</strong> has been reviewed and was not approved at this time.</p>
+                        <p><strong>Reason for rejection:</strong></p>
+                        <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
+                            """ + rejection_reason + """
+                        </div>
+                        <p>You may submit a new registration with corrected information. Please contact our administration if you have any questions about this decision.</p>
+                        <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated message. Please do not reply to this email.</p>
+                        <p>&copy; 2024 """ + app.config['COMPANY_NAME'] + """. All rights reserved.</p>
+                    </div>
+                </body>
+                </html>
+                """
 
-            text_content = app.config['COMPANY_NAME'] + """ - Pet Registration Update
+                text_content = app.config['COMPANY_NAME'] + """ - Pet Registration Update
 
-            Dear """ + owner['full_name'] + """,
+                Dear """ + owner['full_name'] + """,
 
-            We regret to inform you that your pet registration for """ + pet['name'] + """ has been reviewed and was not approved at this time.
+                We regret to inform you that your pet registration for """ + pet['name'] + """ has been reviewed and was not approved at this time.
 
-            Reason for rejection: """ + rejection_reason + """
+                Reason for rejection: """ + rejection_reason + """
 
-            You may submit a new registration with corrected information. Please contact our administration if you have any questions about this decision.
+                You may submit a new registration with corrected information. Please contact our administration if you have any questions about this decision.
 
-            Best regards,
-            Pila Pets Administration
-            Municipality of Pila, Laguna
+                Best regards,
+                Pila Pets Administration
+                Municipality of Pila, Laguna
 
-            This is an automated message. Please do not reply to this email.
-            """
+                This is an automated message. Please do not reply to this email.
+                """
 
-            part1 = MIMEText(text_content, 'plain')
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part1)
-            msg.attach(part2)
+                part1 = MIMEText(text_content, 'plain')
+                part2 = MIMEText(html_content, 'html')
+                msg.attach(part1)
+                msg.attach(part2)
 
-            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-            server.starttls()
-            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-            server.send_message(msg)
-            server.quit()
+                server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+                server.starttls()
+                server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                server.send_message(msg)
+                server.quit()
 
-            print(f"[SUCCESS] Pet rejection notification email sent to {owner['email']}")
-        except Exception as e:
-            print(f"[ERROR] Failed to send pet rejection email: {e}")
+                print(f"[SUCCESS] Pet rejection notification email sent to {owner['email']}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send pet rejection email: {e}")
 
-    flash(f'Pet "{pet["name"]}" has been rejected', 'warning')
-    return jsonify({'success': True, 'message': 'Pet rejected successfully'})
+        conn.commit()
+        db_pool.putconn(conn)
+
+        flash(f'Pet "{pet["name"]}" has been rejected', 'warning')
+        return jsonify({'success': True, 'message': 'Pet rejected successfully'})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/adoption')
 @admin_required
 def admin_adoption():
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
-        ORDER BY pets.registered_on DESC
-    """)
-    adoption_pets = cursor.fetchall()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("""
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                   users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
+            ORDER BY pets.registered_on DESC
+        """)
+        adoption_pets = cursor.fetchall()
 
-    return render_template('admin/adoption.html', adoption_pets=adoption_pets, datetime=datetime)
+        return render_template('admin/adoption.html', adoption_pets=adoption_pets, datetime=datetime)
+
+@app.route('/admin/pet/<int:pet_id>')
+@admin_required
+def admin_pet_details(pet_id):
+    cursor, conn = get_cursor()
+
+    try:
+        # Get pet data with owner information
+        cursor.execute("""
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                   users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.id = %s AND pets.archived = FALSE
+        """, (pet_id,))
+        pet = cursor.fetchone()
+
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            flash('Pet not found', 'error')
+            return redirect(url_for('admin_pets'))
+
+        # Get medical records from database
+        cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+        pet_medical_records = cursor.fetchall()
+
+        # Structure owner data as expected by template
+        owner = {
+            'full_name': pet['owner_name'],
+            'email': pet['owner_email'],
+            'contact_number': pet['owner_contact'],
+            'address': pet['owner_address']
+        }
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/pet_details.html', pet=pet, owner=owner, medical_records=pet_medical_records, datetime=datetime)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/pet/<int:pet_id>/medical-records')
 @admin_required
 def admin_pet_medical_records(pet_id):
-    # Get pet data with owner information
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.id = %s AND pets.archived = FALSE
-    """, (pet_id,))
-    pet = cursor.fetchone()
+    cursor, conn = get_cursor()
 
-    if not pet:
-        flash('Pet not found', 'error')
-        return redirect(url_for('admin_pets'))
+    try:
+        # Get pet data with owner information
+        cursor.execute("""
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                   users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.id = %s AND pets.archived = FALSE
+        """, (pet_id,))
+        pet = cursor.fetchone()
 
-    # Get medical records from database
-    cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
-    pet_medical_records = cursor.fetchall()
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            flash('Pet not found', 'error')
+            return redirect(url_for('admin_pets'))
 
-    return render_template('admin/pet_medical_records.html', pet=pet, medical_records=pet_medical_records)
+        # Get medical records from database
+        cursor.execute("SELECT * FROM medical_records WHERE pet_id = %s ORDER BY record_date DESC", (pet_id,))
+        pet_medical_records = cursor.fetchall()
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        return render_template('admin/pet_medical_records.html', pet=pet, medical_records=pet_medical_records)
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/pending-pets')
 @admin_required
 def admin_pending_pets():
-    cursor.execute("""
-        SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
-               users.contact_number AS owner_contact, users.address AS owner_address
-        FROM pets
-        JOIN users ON pets.owner_id = users.id
-        WHERE pets.status = 'pending' AND pets.archived = FALSE
-        ORDER BY pets.registered_on DESC
-    """)
-    pending_pets = cursor.fetchall()
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    per_page = 15  # Show 15 pending pets per page
 
-    return render_template('admin/pending_pets.html', pending_pets=pending_pets, datetime=datetime)
+    conn = None
+    cursor = None
+    try:
+        # Get database connection from pool
+        cursor, conn = get_cursor()
+
+        # Build base query
+        base_query = """
+            SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
+                   users.contact_number AS owner_contact, users.address AS owner_address
+            FROM pets
+            JOIN users ON pets.owner_id = users.id
+            WHERE pets.status = 'pending' AND pets.archived = FALSE
+        """
+
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM ({base_query}) as subquery"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()['total']
+
+        # Add ordering and pagination for main query
+        query = base_query + " ORDER BY pets.registered_on DESC LIMIT %s OFFSET %s"
+        cursor.execute(query, (per_page, (page - 1) * per_page))
+        pending_pets = cursor.fetchall()
+
+        conn.commit()
+
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+
+        # Calculate display range for template
+        start_item = (page - 1) * per_page + 1
+        end_item = min(page * per_page, total_count)
+
+        return render_template('admin/pending_pets.html',
+                             pending_pets=pending_pets,
+                             datetime=datetime,
+                             page=page,
+                             total_pages=total_pages,
+                             total_count=total_count,
+                             per_page=per_page,
+                             start_item=start_item,
+                             end_item=end_item)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        # Always return the connection to the pool if it was obtained
+        if conn:
+            db_pool.putconn(conn)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port = 5000, debug=True)

@@ -9,40 +9,15 @@
 
     <div class="row g-0">
         <!-- Sidebar -->
-        <div class="col-md-2 sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <button class="close-sidebar d-md-none" id="closeSidebar">
-                    <i class="fas fa-times"></i>
-                </button>
-                <h4><i class="fas fa-paw me-2"></i>Pila Pets</h4>
-                <p class="mb-0">Municipality of Pila, Laguna</p>
-            </div>
-            <nav class="sidebar-nav">
-                <a href="{{ url_for('user_dashboard') }}" class="nav-link">
-                    <i class="fas fa-home me-2"></i>Dashboard
-                </a>
-                <a href="{{ url_for('adoption') }}" class="nav-link">
-                    <i class="fas fa-heart me-2"></i>Adoption
-                </a>
-                <a href="{{ url_for('lost_pets') }}" class="nav-link">
-                    <i class="fas fa-search me-2"></i>Lost Pets
-                </a>
-                <a href="{{ url_for('edit_profile') }}" class="nav-link">
-                    <i class="fas fa-user-edit me-2"></i>Edit Profile
-                </a>
-                <a href="#" onclick="confirmLogout()" class="nav-link">
-                    <i class="fas fa-sign-out-alt me-2"></i>Logout
-                </a>
-            </nav>
-        </div>
+        {% include 'admin/sidebar.html' %}
 
         <!-- Main Content -->
         <div class="col-md-10 main-content-wrapper">
             <div class="main-content">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h3>Pet Details</h3>
-                    <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                    <a href="{{ url_for('admin_pets') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Pets
                     </a>
                 </div>
 
@@ -115,41 +90,51 @@
                                     </div>
                                 </div>
 
-                                <!-- Owner Information Removed -->
+                                <!-- Owner Information -->
+                                <div class="row mt-4">
+                                    <div class="col-md-12">
+                                        <h6><i class="fas fa-user me-2"></i>Owner Information</h6>
+                                        <table class="table table-borderless">
+                                            <tr>
+                                                <td><strong>Name:</strong></td>
+                                                <td>{{ owner.full_name }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Email:</strong></td>
+                                                <td>{{ owner.email }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Contact Number:</strong></td>
+                                                <td>{{ owner.contact_number or 'Not provided' }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Address:</strong></td>
+                                                <td>{{ owner.address or 'Not provided' }}</td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Quick Actions -->
                             <div class="col-md-4">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h6>
+                                        <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>Admin Actions</h6>
                                     </div>
                                     <div class="card-body">
                                         <div class="d-grid gap-2">
-                                            <a href="{{ url_for('edit_pet', pet_id=pet.id) }}" class="btn btn-outline-secondary">
-                                                <i class="fas fa-edit me-2"></i>Edit Pet Details
+                                            <a href="{{ url_for('admin_pet_medical_records', pet_id=pet.id) }}" class="btn btn-outline-primary">
+                                                <i class="fas fa-notes-medical me-2"></i>View Medical Records
                                             </a>
-                                            <a href="{{ url_for('medical_records', pet_id=pet.id) }}" class="btn btn-outline-primary">
-                                                <i class="fas fa-plus-circle me-2"></i>Add Medical Records
-                                            </a>
-                                            {% if not pet.lost %}
-                                            {% if pet.available_for_adoption %}
-                                            <button type="button" class="btn btn-outline-danger" onclick="toggleAdoption({{ pet.id }}, false)">
-                                                <i class="fas fa-times me-2"></i>Remove from Adoption
-                                            </button>
-                                            {% else %}
-                                            <button type="button" class="btn btn-outline-success" onclick="toggleAdoption({{ pet.id }}, true)">
-                                                <i class="fas fa-heart me-2"></i>Put Up for Adoption
-                                            </button>
-                                            {% endif %}
-                                            <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#reportLostModal" data-pet-id="{{ pet.id }}">
-                                                <i class="fas fa-exclamation-triangle me-2"></i>Report Lost
-                                            </button>
-                                            {% else %}
-                                            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#markFoundModal" data-pet-id="{{ pet.id }}">
+                                            {% if pet.lost %}
+                                            <button type="button" class="btn btn-outline-success" onclick="markAsFound({{ pet.id }})">
                                                 <i class="fas fa-check-circle me-2"></i>Mark as Found
                                             </button>
                                             {% endif %}
+                                            <button type="button" class="btn btn-outline-danger" onclick="archivePet({{ pet.id }})">
+                                                <i class="fas fa-archive me-2"></i>Archive Pet
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -223,35 +208,6 @@
     </div>
 </div>
 
-<!-- Report Lost Modal -->
-<div class="modal fade" id="reportLostModal" tabindex="-1" aria-labelledby="reportLostModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="reportLostModalLabel">
-                    <i class="fas fa-exclamation-triangle me-2"></i>Report Pet as Lost
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted">Please provide details about how your pet was lost. This information will be sent to the administrators to help with the search.</p>
-                <form id="reportLostForm">
-                    <div class="mb-3">
-                        <label for="lostComment" class="form-label">How was your pet lost? <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="lostComment" rows="4" placeholder="Describe the circumstances of how your pet went missing (e.g., escaped from backyard, lost during walk, etc.)" required></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-warning" onclick="submitReportLost()">
-                    <i class="fas fa-exclamation-triangle me-2"></i>Report as Lost
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <!-- Mark Found Modal -->
 <div class="modal fade" id="markFoundModal" tabindex="-1" aria-labelledby="markFoundModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -263,11 +219,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Great news! Please provide details about how your pet was found. This will help update the records and notify administrators.</p>
+                <p class="text-muted">Please provide an admin note about how this pet was found.</p>
                 <form id="markFoundForm">
                     <div class="mb-3">
-                        <label for="foundComment" class="form-label">How was your pet found? <span class="text-danger">*</span></label>
-                        <textarea class="form-control" id="foundComment" rows="4" placeholder="Describe how your pet was found (e.g., returned by neighbor, found at shelter, etc.)" required></textarea>
+                        <label for="foundNote" class="form-label">Admin Note <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="foundNote" rows="4" placeholder="Provide details about how the pet was found..." required></textarea>
                     </div>
                 </form>
             </div>
@@ -281,33 +237,24 @@
     </div>
 </div>
 
-<!-- Upload Photo Modal -->
-<div class="modal fade" id="uploadPhotoModal" tabindex="-1" aria-labelledby="uploadPhotoModalLabel" aria-hidden="true">
+<!-- Archive Pet Modal -->
+<div class="modal fade" id="archivePetModal" tabindex="-1" aria-labelledby="archivePetModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="uploadPhotoModalLabel">
-                    <i class="fas fa-camera me-2"></i>Upload Pet Photo
+                <h5 class="modal-title" id="archivePetModalLabel">
+                    <i class="fas fa-archive me-2"></i>Archive Pet
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="text-muted">Upload a clear photo of your pet. This will help identify your pet if it gets lost.</p>
-                <form id="uploadPhotoForm" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label for="petPhoto" class="form-label">Select Photo <span class="text-danger">*</span></label>
-                        <input type="file" class="form-control" id="petPhoto" name="pet_photo" accept="image/*" required>
-                        <div class="form-text">Supported formats: PNG, JPG, JPEG, GIF. Maximum size: 16MB.</div>
-                    </div>
-                    <div id="photoPreview" class="text-center mb-3" style="display: none;">
-                        <img id="previewImage" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
-                    </div>
-                </form>
+                <p class="text-danger">Are you sure you want to archive this pet? This action cannot be undone.</p>
+                <p class="text-muted">Archived pets will be hidden from the main listings but can be restored from the Archived Records section.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitPhotoUpload()">
-                    <i class="fas fa-upload me-2"></i>Upload Photo
+                <button type="button" class="btn btn-danger" onclick="confirmArchivePet()">
+                    <i class="fas fa-archive me-2"></i>Archive Pet
                 </button>
             </div>
         </div>
@@ -346,7 +293,7 @@
 
 {% block scripts %}
 <script>
-// Global variables and functions for Report Lost functionality
+// Global variables
 let currentPetId = null;
 
 // Initialize modal event listeners when DOM is loaded
@@ -361,9 +308,11 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Close sidebar on close button click
-    closeSidebar.addEventListener('click', function() {
-        sidebar.classList.remove('sidebar-open');
-    });
+    if (closeSidebar) {
+        closeSidebar.addEventListener('click', function() {
+            sidebar.classList.remove('sidebar-open');
+        });
+    }
 
     // Close sidebar when clicking outside on mobile
     document.addEventListener('click', function(event) {
@@ -373,107 +322,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
-
-    const reportLostModal = document.getElementById('reportLostModal');
-    const markFoundModal = document.getElementById('markFoundModal');
-    const uploadPhotoModal = document.getElementById('uploadPhotoModal');
-
-    if (reportLostModal) {
-        reportLostModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const petId = button.getAttribute('data-pet-id');
-            console.log('Modal opening for petId:', petId);
-            currentPetId = parseInt(petId);
-            document.getElementById('lostComment').value = '';
-        });
-    }
-
-    if (markFoundModal) {
-        markFoundModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const petId = button.getAttribute('data-pet-id');
-            console.log('Mark found modal opening for petId:', petId);
-            currentPetId = parseInt(petId);
-            document.getElementById('foundComment').value = '';
-        });
-    }
-
-    if (uploadPhotoModal) {
-        uploadPhotoModal.addEventListener('show.bs.modal', function(event) {
-            const button = event.relatedTarget;
-            const petId = button.getAttribute('data-pet-id');
-            console.log('Upload photo modal opening for petId:', petId);
-            currentPetId = parseInt(petId);
-            document.getElementById('petPhoto').value = '';
-            document.getElementById('photoPreview').style.display = 'none';
-            document.getElementById('previewImage').src = '';
-        });
-    }
-
-    // Image preview functionality
-    document.getElementById('petPhoto').addEventListener('change', function(event) {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById('previewImage').src = e.target.result;
-                document.getElementById('photoPreview').style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        } else {
-            document.getElementById('photoPreview').style.display = 'none';
-        }
-    });
 });
 
-function submitReportLost() {
-    console.log('submitReportLost called with currentPetId:', currentPetId);
-    const comment = document.getElementById('lostComment').value.trim();
-    if (!comment) {
-        alert('Please provide details about how your pet was lost.');
-        return;
-    }
-
-    // Show loading state
-    const submitBtn = document.querySelector('#reportLostModal .btn-warning');
-    const originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Reporting...';
-
-    fetch(`/user/report-lost-pet/${currentPetId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ comment: comment })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Pet reported as lost successfully! Administrators have been notified.');
-            const modal = bootstrap.Modal.getInstance(document.getElementById('reportLostModal'));
-            modal.hide();
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while reporting the pet as lost.');
-    })
-    .finally(() => {
-        // Reset button state
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalText;
-    });
+function markAsFound(petId) {
+    currentPetId = petId;
+    document.getElementById('foundNote').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('markFoundModal'));
+    modal.show();
 }
 
 function submitMarkFound() {
-    console.log('submitMarkFound called with currentPetId:', currentPetId);
-    const comment = document.getElementById('foundComment').value.trim();
-    if (!comment) {
-        alert('Please provide details about how your pet was found.');
+    const note = document.getElementById('foundNote').value.trim();
+    if (!note) {
+        alert('Please provide an admin note.');
         return;
     }
 
@@ -481,19 +342,19 @@ function submitMarkFound() {
     const submitBtn = document.querySelector('#markFoundModal .btn-success');
     const originalText = submitBtn.innerHTML;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Marking...';
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
 
-    fetch(`/user/mark-found-pet/${currentPetId}`, {
+    fetch(`/admin/mark-pet-found/${currentPetId}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ comment: comment })
+        body: JSON.stringify({ note: note })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Pet marked as found successfully! Administrators have been notified.');
+            alert('Pet marked as found successfully!');
             const modal = bootstrap.Modal.getInstance(document.getElementById('markFoundModal'));
             modal.hide();
             location.reload();
@@ -512,92 +373,36 @@ function submitMarkFound() {
     });
 }
 
-function toggleAdoption(petId, available) {
-    const action = available ? 'put up for adoption' : 'remove from adoption';
-    const confirmMessage = `Are you sure you want to ${action} for this pet?`;
-
-    if (!confirm(confirmMessage)) {
-        return;
-    }
-
-    // Show loading state
-    const buttons = document.querySelectorAll(`button[onclick*="toggleAdoption(${petId}"]`);
-    buttons.forEach(btn => {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Updating...';
-    });
-
-    fetch(`/user/toggle-pet-adoption/${petId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ available_for_adoption: available })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(`Pet ${available ? 'put up for adoption' : 'removed from adoption'} successfully!`);
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
-            // Re-enable buttons
-            buttons.forEach(btn => {
-                btn.disabled = false;
-                btn.innerHTML = btn.onclick.toString().includes('true') ?
-                    '<i class="fas fa-heart me-2"></i>Put Up for Adoption' :
-                    '<i class="fas fa-times me-2"></i>Remove from Adoption';
-            });
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while updating adoption status.');
-        // Re-enable buttons
-        buttons.forEach(btn => {
-            btn.disabled = false;
-            btn.innerHTML = btn.onclick.toString().includes('true') ?
-                '<i class="fas fa-heart me-2"></i>Put Up for Adoption' :
-                '<i class="fas fa-times me-2"></i>Remove from Adoption';
-        });
-    });
+function archivePet(petId) {
+    currentPetId = petId;
+    const modal = new bootstrap.Modal(document.getElementById('archivePetModal'));
+    modal.show();
 }
 
-function submitPhotoUpload() {
-    console.log('submitPhotoUpload called with currentPetId:', currentPetId);
-    const form = document.getElementById('uploadPhotoForm');
-    const formData = new FormData(form);
-    const fileInput = document.getElementById('petPhoto');
-
-    if (!fileInput.files[0]) {
-        alert('Please select a photo to upload.');
-        return;
-    }
-
+function confirmArchivePet() {
     // Show loading state
-    const submitBtn = document.querySelector('#uploadPhotoModal .btn-primary');
+    const submitBtn = document.querySelector('#archivePetModal .btn-danger');
     const originalText = submitBtn.innerHTML;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Archiving...';
 
-    fetch(`/user/update-pet-photo/${currentPetId}`, {
-        method: 'POST',
-        body: formData
+    fetch(`/admin/archive-pet/${currentPetId}`, {
+        method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Photo uploaded successfully!');
-            const modal = bootstrap.Modal.getInstance(document.getElementById('uploadPhotoModal'));
+            alert('Pet archived successfully!');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('archivePetModal'));
             modal.hide();
-            location.reload();
+            window.location.href = '{{ url_for("admin_pets") }}';
         } else {
             alert('Error: ' + data.message);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred while uploading the photo.');
+        alert('An error occurred while archiving the pet.');
     })
     .finally(() => {
         // Reset button state
@@ -605,6 +410,5 @@ function submitPhotoUpload() {
         submitBtn.innerHTML = originalText;
     });
 }
-
 </script>
 {% endblock %}
