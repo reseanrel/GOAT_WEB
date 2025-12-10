@@ -52,14 +52,14 @@
                             <!-- Pet Information -->
                             <div class="col-md-8">
                                 <div class="d-flex align-items-center mb-3">
-                                    {% if pet.photo_url %}
+                                    {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
                                     <div class="pet-photo-container me-4">
                                         <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="pet-photo rounded-circle shadow-lg" style="width: 150px; height: 150px; object-fit: cover; border: 4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.15);">
                                     </div>
                                     {% endif %}
                                     <div>
                                         <h4 class="text-primary mb-1">{{ pet.name }}</h4>
-                                        {% if pet.photo_url %}
+                                        {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
                                         <small class="text-muted">Pet Photo</small>
                                         {% endif %}
                                     </div>
@@ -103,7 +103,7 @@
                                                 <td>
                                                     {% if pet.deceased %}
                                                     <span class="badge bg-secondary">Deceased</span>
-                                                    {% elif pet.available_for_adoption %}
+                                                    {% elif pet.available_for_adoption and not pet.deceased %}
                                                     <span class="tag-available">Available for Adoption</span>
                                                     {% endif %}
                                                     {% if pet.lost %}
@@ -207,7 +207,7 @@
                                                     <td>{{ record.provider or 'N/A' }}</td>
                                                     <td>{{ record.description or 'N/A' }}</td>
                                                     <td>
-                                                        {% if record.photo_url %}
+                                                        {% if record.photo_url and record.photo_url != 'None' and record.photo_url.strip() %}
                                                         <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank" class="btn btn-sm btn-outline-primary">
                                                             <i class="fas fa-image me-1"></i>View
                                                         </a>

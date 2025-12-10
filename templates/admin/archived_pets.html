@@ -80,7 +80,7 @@
                                             <td>{{ pet.display_id }}</td>
                                             <td>
                                                 <div class="d-flex align-items-center">
-                                                    {% if pet.photo_url %}
+                                                    {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
                                                     <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="rounded me-2" style="width: 40px; height: 40px; object-fit: cover;">
                                                     {% endif %}
                                                     <div>

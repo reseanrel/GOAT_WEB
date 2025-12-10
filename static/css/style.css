@@ -483,6 +483,7 @@ h2 {
 .tag-safe { background: var(--secondary-color); padding: 3px 8px; border-radius: 4px; }
 .tag-available { background: #059669; padding: 3px 8px; border-radius: 4px; }
 .tag-own { background: #10b981; padding: 3px 8px; border-radius: 4px; }
+.tag-deceased { background: #475569; padding: 3px 8px; border-radius: 4px; color: white; }
 
 .details {
     padding: 15px;
@@ -667,4 +668,180 @@ h2 {
 .lost-pets-container .pet-card .comments-section {
     min-height: 120px;
     margin-top: auto;
+}
+
+/* Comment box and button alignment */
+.add-comment-form .input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.add-comment-form .input-group .form-control {
+    flex: 1;
+    min-width: 0;
+    height: 38px;
+    padding: 0.375rem 0.75rem;
+}
+
+.add-comment-form .input-group .btn {
+    margin-left: 0.5rem;
+    white-space: nowrap;
+    height: 38px;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Pagination styling */
+.pagination {
+    margin-bottom: 0;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.pagination .page-item .page-link {
+    color: var(--primary-color);
+    border-color: var(--gray-300);
+}
+
+.pagination .page-item .page-link:hover {
+    color: white;
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: var(--gray-400);
+    background-color: var(--gray-100);
+    border-color: var(--gray-300);
+}
+
+/* Form control alignment for search and filter section */
+.card-body form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.card-body .form-control, .card-body .form-select {
+    width: 100%;
+    min-height: 38px;
+}
+
+.card-body .form-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+/* Ensure form controls have consistent sizing */
+.card-body input.form-control-sm,
+.card-body select.form-select-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    height: calc(1.5em + 0.75rem + 2px);
+    min-height: 38px;
+}
+
+/* Button alignment */
+.card-body .btn {
+    margin-bottom: 0.5rem;
+    height: 38px;
+    line-height: 1;
+}
+
+/* General form alignment for all filter forms */
+.filter-form-container {
+    align-items: flex-end !important;
+    gap: 1rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+.filter-form-container > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem !important;
+    margin-bottom: 0 !important;
+}
+
+/* Ensure all form control containers have same height */
+.filter-form-container > div[style*="flex"] {
+    height: 60px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.filter-form-container .form-control,
+.filter-form-container .form-select {
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0.375rem 0.75rem !important;
+    font-size: 0.875rem !important;
+}
+
+.filter-form-container .btn {
+    height: 38px !important;
+    min-height: 38px !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.filter-form-container .form-label {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    margin-bottom: 0.25rem !important;
+    min-height: 16px !important;
+}
+
+/* Button container alignment */
+.filter-form-container > div:last-child {
+    height: auto !important;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0 !important;
+}
+
+/* Specific styling for admin pets filter form */
+#adminPetsFilterForm {
+    align-items: flex-end !important;
+    gap: 1rem !important;
+    margin-bottom: 1.5rem !important;
+}
+
+#adminPetsFilterForm > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem !important;
+    margin-bottom: 0 !important;
+}
+
+/* Ensure all form control containers have same height */
+#adminPetsFilterForm > div[style*="flex"] {
+    height: 60px !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* Specific adjustments for each form element */
+#adminPetsFilterForm .form-label {
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    margin-bottom: 0.25rem !important;
+    min-height: 16px !important;
+}
+
+/* Button container alignment */
+#adminPetsFilterForm > div:last-child {
+    height: auto !important;
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-bottom: 0 !important;
 }

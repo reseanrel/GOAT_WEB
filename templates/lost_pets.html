@@ -61,7 +61,7 @@
                     <!-- Search and Filter Controls -->
                     <div class="card mb-3">
                         <div class="card-body">
-                            <form method="GET" action="{{ url_for('lost_pets') }}" class="d-flex flex-wrap align-items-end gap-3">
+                            <form method="GET" action="{{ url_for('lost_pets') }}" class="d-flex flex-wrap align-items-end gap-3 filter-form-container">
                                 <div style="flex: 1; min-width: 200px;">
                                     <label for="search" class="form-label mb-1">Search Pets</label>
                                     <input type="text" class="form-control form-control-sm" id="search" name="search" value="{{ request.args.get('search', '') }}" placeholder="Search by name, breed, or owner...">
@@ -122,25 +122,6 @@
                                 <p><strong>Color:</strong> {{ pet.color or 'Not specified' }}</p>
                                 <p><strong>Lost On:</strong> {{ pet.registered_on.strftime('%m/%d/%Y') }}</p>
 
-                                <div class="owner-info mt-3">
-                                    <h6 class="text-primary mb-2"><i class="fas fa-user me-2"></i>Owner Information</h6>
-                                    <div class="small">
-                                        <p class="mb-1"><strong>Name:</strong> {{ pet.owner_name }}</p>
-                                        {% if pet.owner_email %}
-                                        <p class="mb-1"><strong>Email:</strong> {{ pet.owner_email }}</p>
-                                        {% endif %}
-                                        {% if pet.owner_contact %}
-                                        <p class="mb-1"><strong>Contact:</strong> {{ pet.owner_contact }}</p>
-                                        {% endif %}
-                                        {% if pet.owner_address %}
-                                        <p class="mb-1"><strong>Address:</strong> {{ pet.owner_address }}</p>
-                                        {% endif %}
-                                    </div>
-                                    <button class="btn btn-success btn-sm w-100 mt-2" onclick="contactOwner('{{ pet.owner_email }}', '{{ pet.owner_name }}', '{{ pet.name }}')">
-                                        <i class="fas fa-envelope me-2"></i>Contact Owner
-                                    </button>
-                                </div>
-
                                 <!-- Comments Section -->
                                 <div class="comments-section mt-3">
                                     <h6 class="text-info mb-2"><i class="fas fa-comments me-2"></i>Comments & Tips</h6>
@@ -177,11 +158,60 @@
                         {% endfor %}
                     </div>
                 {% else %}
-                    <div class="text-center py-5" style="width: 100%;">
-                        <i class="fas fa-heart fa-4x text-success mb-3"></i>
-                        <h3>No Lost Pets</h3>
-                        <p class="text-muted">Great news! There are currently no reported lost pets in our system.</p>
-                    </div>
+                <div class="text-center py-5" style="width: 100%;">
+                    <i class="fas fa-heart fa-4x text-success mb-3"></i>
+                    <h3>No Lost Pets</h3>
+                    <p class="text-muted">Great news! There are currently no reported lost pets in our system.</p>
+                </div>
+                {% endif %}
+
+                <!-- Pagination Controls -->
+                {% if lost_pets and total_pages and total_pages > 1 %}
+                <nav aria-label="Lost pets pagination" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <!-- Previous Page -->
+                        {% if page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('lost_pets', page=page-1, search=search_query if search_query else '', category=category_filter if category_filter else '') }}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link" aria-hidden="true">&laquo;</span>
+                        </li>
+                        {% endif %}
+
+                        <!-- Page Numbers -->
+                        {% for p in range(1, total_pages + 1) %}
+                            {% if p == page %}
+                            <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                            {% else %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('lost_pets', page=p, search=search_query if search_query else '', category=category_filter if category_filter else '') }}">{{ p }}</a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        <!-- Next Page -->
+                        {% if page < total_pages %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('lost_pets', page=page+1, search=search_query if search_query else '', category=category_filter if category_filter else '') }}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link" aria-hidden="true">&raquo;</span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+
+                <!-- Pagination Info -->
+                <div class="text-center text-muted small mt-2">
+                    Showing {{ (page - 1) * 15 + 1 }} to {{ [page * 15, total_count] | min }} of {{ total_count }} lost pets
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -189,11 +219,6 @@
 </div>
 
 <script>
-function contactOwner(email, ownerName, petName) {
-    const subject = encodeURIComponent(`Found your lost pet: ${petName}`);
-    const body = encodeURIComponent(`Dear ${ownerName},\n\nI believe I have found your lost pet ${petName}. Please contact me to arrange for the safe return of your pet.\n\nBest regards,`);
-    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-}
 
 // Handle comment form submission
 document.addEventListener('DOMContentLoaded', function() {

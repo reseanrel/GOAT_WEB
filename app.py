@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
 from datetime import datetime
 import os
 import random
@@ -112,6 +112,11 @@ app.config['COMPANY_NAME'] = 'Pila Pet Registration'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# Add route to serve uploaded files
+@app.route('/static/uploads/<path:filename>')
+def serve_uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 # Create uploads directory if it doesn't exist
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -235,6 +240,11 @@ def login():
             }
 
         if user and user['password'] == password:
+            # Check if user is archived
+            if user.get('archived', False):
+                flash('This account has been archived and cannot be used to login. Please contact administration.', 'error')
+                return render_template('auth/login.html')
+
             # [SUCCESS] Save user info in session
             session['user_id'] = user['id']
             session['is_admin'] = user['is_admin']
@@ -490,9 +500,34 @@ def register_pet():
         gender = request.form.get('gender')
         available_for_adoption = request.form.get('for_adoption') == 'on'
 
-        if not name or not category:
-            flash('Pet name and category are required', 'error')
-            return render_template('user/register_pet.html')
+        # Validate required fields
+        errors = {}
+        if not name:
+            errors['pet_name'] = 'Pet name is required'
+        if not category:
+            errors['pet_category'] = 'Pet category is required'
+
+        # If there are validation errors, return to form with errors and preserve entered data
+        if errors:
+            return render_template('user/register_pet.html',
+                                 errors=errors,
+                                 form_data=request.form,
+                                 pet_name=name,
+                                 pet_category=category,
+                                 pet_type=pet_type,
+                                 age=age,
+                                 color=color,
+                                 gender=gender,
+                                 for_adoption=available_for_adoption)
+
+        # Convert empty age to None for database insertion
+        if age == '' or age is None:
+            age = None
+        else:
+            try:
+                age = int(age)
+            except ValueError:
+                age = None
 
         # Handle file upload
         photo_filename = None
@@ -512,7 +547,7 @@ def register_pet():
         cursor.execute("""
             INSERT INTO pets (name, category, pet_type, age, color, gender, owner_id, photo_url, available_for_adoption, status)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
-        """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename, available_for_adoption))
+        """, (name, category, pet_type, age, color, gender, session['user_id'], photo_filename if photo_filename else None, available_for_adoption))
         conn.commit()
         db_pool.putconn(conn)
 
@@ -946,8 +981,8 @@ def mark_pet_deceased(pet_id):
         if pet['deceased']:
             return jsonify({'success': False, 'message': 'Pet is already marked as deceased'})
 
-        # Update pet as deceased
-        cursor.execute("UPDATE pets SET deceased = TRUE, deceased_at = NOW() WHERE id = %s", (pet_id,))
+        # Update pet as deceased and remove from adoption
+        cursor.execute("UPDATE pets SET deceased = TRUE, deceased_at = NOW(), available_for_adoption = FALSE WHERE id = %s", (pet_id,))
 
     flash(f'Pet "{pet["name"]}" has been marked as deceased.', 'info')
     return jsonify({'success': True, 'message': 'Pet marked as deceased successfully'})
@@ -1094,7 +1129,7 @@ def adoption():
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '') or 'all'
     page = int(request.args.get('page', 1))
-    per_page = 12  # Reasonable limit for adoption page
+    per_page = 15  # Show 15 pets per page
 
     cursor, conn = get_cursor()
 
@@ -1523,6 +1558,8 @@ def edit_pet(pet_id):
             gender = request.form.get('gender')
             available_for_adoption = request.form.get('for_adoption') == 'on'
 
+            print(f"[DEBUG] Form data received: name={name}, category={category}, age={age}, available_for_adoption={available_for_adoption}")
+
             if not name or not category:
                 flash('Pet name and category are required', 'error')
                 return render_template('user/edit_pet.html', pet=pet, datetime=datetime)
@@ -1566,11 +1603,13 @@ def edit_pet(pet_id):
 
             try:
                 print(f"[DEBUG] Updating pet {pet_id} with photo_filename: '{photo_filename}' (type: {type(photo_filename)})")
+                # Convert string 'None' to actual NULL for database
+                photo_url_value = None if photo_filename == 'None' else photo_filename
                 cursor.execute("""
                     UPDATE pets
                     SET name = %s, category = %s, pet_type = %s, age = %s, color = %s, gender = %s, available_for_adoption = %s, photo_url = %s
                     WHERE id = %s AND owner_id = %s
-                """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_filename, pet_id, session['user_id']))
+                """, (name, category, pet_type, age, color, gender, available_for_adoption, photo_url_value, pet_id, session['user_id']))
 
                 # Verify the update
                 cursor.execute("SELECT photo_url FROM pets WHERE id = %s", (pet_id,))
@@ -1578,14 +1617,14 @@ def edit_pet(pet_id):
                 print(f"[DEBUG] After update, photo_url in database: '{updated_pet['photo_url']}'")
 
                 flash(f'Pet "{name}" updated successfully!', 'success')
-                # Refetch the updated pet data to show in the edit form
-                cursor.execute("SELECT * FROM pets WHERE id = %s AND owner_id = %s", (pet_id, session['user_id']))
-                updated_pet = cursor.fetchone()
-                return render_template('user/edit_pet.html', pet=updated_pet, datetime=datetime)
+                # Redirect to pet details page after successful update
+                conn.commit()
+                db_pool.putconn(conn)
+                return redirect(url_for('pet_details', pet_id=pet_id))
 
             except Exception as e:
                 print("[ERROR] ERROR:", e)
-                db.rollback()
+                conn.rollback()
                 flash('An error occurred while updating the pet. Please try again.', 'error')
 
         conn.commit()
@@ -1806,6 +1845,7 @@ def admin_pets():
     search_query = request.args.get('search', '').strip()
     category_filter = request.args.get('category', '') or 'all'
     status_filter = request.args.get('status', '') or 'all'
+    deceased_filter = request.args.get('deceased', '') or 'all'
     page = int(request.args.get('page', 1))
     per_page = 15  # Show 15 pets per page
 
@@ -1818,14 +1858,20 @@ def admin_pets():
         # Build base query with pagination
         query = """
             SELECT p.id, p.name, p.category, p.pet_type, p.age, p.color, p.gender,
-                   p.photo_url, p.available_for_adoption, p.lost, p.registered_on,
+                   p.photo_url, p.available_for_adoption, p.lost, p.registered_on, p.deceased,
                    u.full_name AS owner_name, u.email AS owner_email,
                    u.contact_number AS owner_contact, u.address AS owner_address
             FROM pets p
             JOIN users u ON p.owner_id = u.id
-            WHERE p.archived = FALSE AND p.status = 'approved' AND p.deceased = FALSE
+            WHERE p.archived = FALSE AND p.status = 'approved'
         """
         params = []
+
+        # Add deceased filter
+        if deceased_filter == 'true':
+            query += " AND p.deceased = TRUE"
+        elif deceased_filter == 'false':
+            query += " AND p.deceased = FALSE"
 
         # Add search conditions
         if search_query:
@@ -1841,6 +1887,8 @@ def admin_pets():
             query += " AND p.lost = TRUE"
         elif status_filter == 'safe':
             query += " AND p.lost = FALSE"
+        elif status_filter == 'deceased':
+            query += " AND p.deceased = TRUE"
 
         # Get total count for pagination
         count_query = f"SELECT COUNT(*) as total FROM ({query}) as subquery"
@@ -1869,6 +1917,7 @@ def admin_pets():
                               search_query=search_query,
                               category_filter=category_filter,
                               status_filter=status_filter,
+                              deceased_filter=deceased_filter,
                               page=page,
                               total_pages=total_pages,
                               total_count=total_count,
@@ -2546,113 +2595,130 @@ def delete_comment(comment_id):
 @app.route('/admin/approve-pet/<int:pet_id>', methods=['POST'])
 @admin_required
 def approve_pet(pet_id):
-    cursor.execute("SELECT * FROM pets WHERE id = %s", (pet_id,))
-    pet = cursor.fetchone()
+    cursor, conn = get_cursor()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Pet not found'})
+    try:
+        cursor.execute("SELECT * FROM pets WHERE id = %s", (pet_id,))
+        pet = cursor.fetchone()
 
-    if pet['status'] != 'pending':
-        return jsonify({'success': False, 'message': 'Pet is not pending approval'})
+        if not pet:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet not found'})
 
-    if pet['deceased']:
-        return jsonify({'success': False, 'message': 'Cannot approve a deceased pet'})
+        if pet['status'] != 'pending':
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Pet is not pending approval'})
 
-    # Update pet status to approved
-    # For admin (id=0), set approved_by to NULL since admin is not in users table
-    approved_by = None if session['user_id'] == 0 else session['user_id']
-    cursor.execute("""
-        UPDATE pets
-        SET status = 'approved', approved_at = NOW(), approved_by = %s
-        WHERE id = %s
-    """, (approved_by, pet_id))
+        if pet['deceased']:
+            conn.commit()
+            db_pool.putconn(conn)
+            return jsonify({'success': False, 'message': 'Cannot approve a deceased pet'})
 
-    # Send email notification to pet owner
-    cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
-    owner = cursor.fetchone()
+        # Update pet status to approved
+        # For admin (id=0), set approved_by to NULL since admin is not in users table
+        approved_by = None if session['user_id'] == 0 else session['user_id']
+        cursor.execute("""
+            UPDATE pets
+            SET status = 'approved', approved_at = NOW(), approved_by = %s
+            WHERE id = %s
+        """, (approved_by, pet_id))
 
-    if owner:
-        try:
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"Good News! Your pet {pet['name']} has been approved",
-            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
-            msg['To'] = owner['email']
+        # Send email notification to pet owner
+        cursor.execute("SELECT email, full_name FROM users WHERE id = %s", (pet['owner_id'],))
+        owner = cursor.fetchone()
 
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <h1>{app.config['COMPANY_NAME']} - Pet Approved!</h1>
-                </div>
-                <div class="content">
-                    <p>Dear {owner['full_name']},</p>
-                    <p>Great news! Your pet registration for <strong>{pet['name']}</strong> has been approved by our administrators.</p>
-                    <p>Your pet is now officially registered in the Pila Pet Registration System and will be visible to other users.</p>
-                    <p>You can now:</p>
-                    <ul>
-                        <li>View your pet in "My Pets" section</li>
-                        <li>Report your pet as lost if needed</li>
-                        <li>Put your pet up for adoption</li>
-                        <li>Access vaccination records and other features</li>
-                    </ul>
-                    <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
-                </div>
-                <div class="footer">
-                    <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-                </div>
-            </body>
-            </html>
-            """
+        if owner:
+            try:
+                msg = MIMEMultipart('alternative')
+                msg['Subject'] = f"Good News! Your pet {pet['name']} has been approved",
+                msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>",
+                msg['To'] = owner['email']
 
-            text_content = f"""
-            {app.config['COMPANY_NAME']} - Pet Approved!
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background: #4CAF50; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                        .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>{app.config['COMPANY_NAME']} - Pet Approved!</h1>
+                    </div>
+                    <div class="content">
+                        <p>Dear {owner['full_name']},</p>
+                        <p>Great news! Your pet registration for <strong>{pet['name']}</strong> has been approved by our administrators.</p>
+                        <p>Your pet is now officially registered in the Pila Pet Registration System and will be visible to other users.</p>
+                        <p>You can now:</p>
+                        <ul>
+                            <li>View your pet in "My Pets" section</li>
+                            <li>Report your pet as lost if needed</li>
+                            <li>Put your pet up for adoption</li>
+                            <li>Access vaccination records and other features</li>
+                        </ul>
+                        <p>Best regards,<br>Pila Pets Administration<br>Municipality of Pila, Laguna</p>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated message. Please do not reply to this email.</p>
+                        <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                    </div>
+                </body>
+                </html>
+                """
 
-            Dear {owner['full_name']},
+                text_content = f"""
+                {app.config['COMPANY_NAME']} - Pet Approved!
 
-            Great news! Your pet registration for {pet['name']} has been approved by our administrators.
+                Dear {owner['full_name']},
 
-            Your pet is now officially registered in the Pila Pet Registration System and will be visible to other users.
+                Great news! Your pet registration for {pet['name']} has been approved by our administrators.
 
-            You can now:
-            - View your pet in "My Pets" section
-            - Report your pet as lost if needed
-            - Put your pet up for adoption
-            - Access vaccination records and other features
+                Your pet is now officially registered in the Pila Pet Registration System and will be visible to other users.
 
-            Best regards,
-            Pila Pets Administration
-            Municipality of Pila, Laguna
+                You can now:
+                - View your pet in "My Pets" section
+                - Report your pet as lost if needed
+                - Put your pet up for adoption
+                - Access vaccination records and other features
 
-            This is an automated message. Please do not reply to this email.
-            """
+                Best regards,
+                Pila Pets Administration
+                Municipality of Pila, Laguna
 
-            part1 = MIMEText(text_content, 'plain')
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part1)
-            msg.attach(part2)
+                This is an automated message. Please do not reply to this email.
+                """
 
-            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-            server.starttls()
-            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-            server.send_message(msg)
-            server.quit()
+                part1 = MIMEText(text_content, 'plain')
+                part2 = MIMEText(html_content, 'html')
+                msg.attach(part1)
+                msg.attach(part2)
 
-            print(f"[SUCCESS] Pet approval notification email sent to {owner['email']}")
-        except Exception as e:
-            print(f"[ERROR] Failed to send pet approval email: {e}")
+                server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+                server.starttls()
+                server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                server.send_message(msg)
+                server.quit()
 
-    flash(f'Pet "{pet["name"]}" has been approved successfully', 'success')
-    return jsonify({'success': True, 'message': 'Pet approved successfully'})
+                print(f"[SUCCESS] Pet approval notification email sent to {owner['email']}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send pet approval email: {e}")
+
+        conn.commit()
+        db_pool.putconn(conn)
+
+        flash(f'Pet "{pet["name"]}" has been approved successfully', 'success')
+        return jsonify({'success': True, 'message': 'Pet approved successfully'})
+    except Exception as e:
+        if 'conn' in locals():
+            conn.rollback()
+            db_pool.putconn(conn)
+        raise
 
 @app.route('/admin/reject-pet/<int:pet_id>', methods=['POST'])
 @admin_required
@@ -2774,18 +2840,61 @@ def reject_pet(pet_id):
 @app.route('/admin/adoption')
 @admin_required
 def admin_adoption():
-    with DatabaseConnection() as (cursor, conn):
-        cursor.execute("""
+    # Get pagination parameters
+    page = int(request.args.get('page', 1))
+    per_page = 15  # Show 15 pets per page
+
+    conn = None
+    cursor = None
+    try:
+        # Get database connection from pool
+        cursor, conn = get_cursor()
+
+        # Build base query
+        base_query = """
             SELECT pets.*, users.full_name AS owner_name, users.email AS owner_email,
                    users.contact_number AS owner_contact, users.address AS owner_address
             FROM pets
             JOIN users ON pets.owner_id = users.id
             WHERE pets.available_for_adoption = TRUE AND pets.lost = FALSE AND pets.archived = FALSE AND pets.status = 'approved'
-            ORDER BY pets.registered_on DESC
-        """)
+        """
+
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) as total FROM ({base_query}) as subquery"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()['total']
+
+        # Add ordering and pagination for main query
+        query = base_query + " ORDER BY pets.registered_on DESC LIMIT %s OFFSET %s"
+        cursor.execute(query, (per_page, (page - 1) * per_page))
         adoption_pets = cursor.fetchall()
 
-        return render_template('admin/adoption.html', adoption_pets=adoption_pets, datetime=datetime)
+        conn.commit()
+
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+
+        # Calculate display range for template
+        start_item = (page - 1) * per_page + 1
+        end_item = min(page * per_page, total_count)
+
+        return render_template('admin/adoption.html',
+                              adoption_pets=adoption_pets,
+                              datetime=datetime,
+                              page=page,
+                              total_pages=total_pages,
+                              total_count=total_count,
+                              per_page=per_page,
+                              start_item=start_item,
+                              end_item=end_item)
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        # Always return the connection to the pool if it was obtained
+        if conn:
+            db_pool.putconn(conn)
 
 @app.route('/admin/pet/<int:pet_id>')
 @admin_required

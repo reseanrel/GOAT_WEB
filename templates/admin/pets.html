@@ -27,7 +27,7 @@
                 <!-- Search and Filter Controls -->
                 <div class="card mb-3">
                     <div class="card-body">
-                        <form method="GET" action="{{ url_for('admin_pets') }}" class="d-flex flex-wrap align-items-end gap-3">
+                        <form id="adminPetsFilterForm" method="GET" action="{{ url_for('admin_pets') }}" class="d-flex flex-wrap align-items-end gap-3">
                             <div style="flex: 1; min-width: 200px;">
                                 <label for="search" class="form-label mb-1">Search Pets</label>
                                 <input type="text" class="form-control form-control-sm" id="search" name="search" value="{{ request.args.get('search', '') }}" placeholder="Search by name, breed, or owner...">
@@ -47,6 +47,7 @@
                                     <option value="">All Pets</option>
                                     <option value="safe" {% if request.args.get('status') == 'safe' %}selected{% endif %}>Safe Pets</option>
                                     <option value="lost" {% if request.args.get('status') == 'lost' %}selected{% endif %}>Lost Pets</option>
+                                    <option value="deceased" {% if request.args.get('status') == 'deceased' %}selected{% endif %}>Deceased Pets</option>
                                 </select>
                             </div>
                             <div style="flex: 0 0 auto;">
@@ -76,10 +77,12 @@
             {% else %}
             <span class="tag-other">{{ pet.category }}</span>
             {% endif %}
-            {% if pet.available_for_adoption %}
+            {% if pet.available_for_adoption and not pet.deceased %}
             <span class="tag-available">Available for Adoption</span>
             {% endif %}
-            {% if pet.lost %}
+            {% if pet.deceased %}
+            <span class="tag-deceased">Deceased</span>
+            {% elif pet.lost %}
             <span class="tag-lost">Lost</span>
             {% else %}
             <span class="tag-safe">Safe</span>

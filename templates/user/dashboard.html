@@ -37,7 +37,7 @@
                     </div>
                 </div>
 
-<div style="margin: 0 2rem 2rem 2rem;">
+<div class="main-content" style="padding: 2rem;">
    <div class="header">
        <div>
            <h2>Your Pets</h2>
@@ -50,7 +50,7 @@
            {% for pet in user_pets %}
        <div class="pet-card">
            {% if pet.photo_url and pet.photo_url.strip() %}
-           <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="pet-img">
+           <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
            {% else %}
            <img src="https://via.placeholder.com/260x200" class="pet-img">
            {% endif %}
@@ -62,7 +62,7 @@
                {% else %}
                <span class="tag-other">{{ pet.category }}</span>
                {% endif %}
-               {% if pet.available_for_adoption %}
+               {% if pet.available_for_adoption and not pet.deceased %}
                <span class="tag-available">Available for Adoption</span>
                {% endif %}
                {% if pet.lost %}
@@ -74,6 +74,9 @@
                <span class="tag-pending">Pending</span>
                {% elif pet.status == 'rejected' %}
                <span class="tag-rejected">Rejected</span>
+               {% endif %}
+               {% if pet.deceased %}
+               <span class="tag-deceased">Deceased</span>
                {% endif %}
            </div>
            <div class="details">

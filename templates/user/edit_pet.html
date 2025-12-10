@@ -29,7 +29,7 @@
                             <div class="card-body">
                                 <form method="POST" action="{{ url_for('edit_pet', pet_id=pet.id) }}" enctype="multipart/form-data">
                                     <!-- Current Pet Photo -->
-                                    {% if pet.photo_url %}
+                                    {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
                                     <div class="mb-4 text-center">
                                         <h6>Current Pet Photo</h6>
                                         <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 200px;">
@@ -99,6 +99,12 @@
                                         </div>
                                     </div>
 
+
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input" id="for_adoption" name="for_adoption"
+                                               {{ 'checked' if pet.available_for_adoption else '' }}>
+                                        <label class="form-check-label" for="for_adoption">Available for Adoption</label>
+                                    </div>
 
                                     <div class="d-flex gap-2">
                                         <button type="submit" class="btn btn-primary">

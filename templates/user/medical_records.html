@@ -59,7 +59,7 @@
                                             <td>{{ record.provider or 'N/A' }}</td>
                                             <td>{{ record.description or 'N/A' }}</td>
                                             <td>
-                                                {% if record.photo_url %}
+                                                {% if record.photo_url and record.photo_url != 'None' and record.photo_url.strip() %}
                                                 <a href="{{ url_for('static', filename='uploads/' + record.photo_url) }}" target="_blank">
                                                     <img src="{{ url_for('static', filename='uploads/' + record.photo_url) }}" alt="Receipt" class="img-thumbnail" style="max-width: 100px; max-height: 100px; cursor: pointer;">
                                                 </a>
