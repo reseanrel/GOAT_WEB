@@ -13,104 +13,103 @@
         <!-- Main Content -->
         <div class="col-md-10 main-content-wrapper">
             <div class="main-content">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h3><i class="fas fa-edit me-2"></i>Edit Pet Details</h3>
-                    <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Pet Details
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="mb-0"><i class="fas fa-edit me-2"></i>Edit Pet Information</h3>
+                    <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Details
                     </a>
                 </div>
 
                 <div class="row justify-content-center">
                     <div class="col-md-8">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">Pet Information</h5>
-                            </div>
-                            <div class="card-body">
-                                <form method="POST" action="{{ url_for('edit_pet', pet_id=pet.id) }}" enctype="multipart/form-data">
-                                    <!-- Current Pet Photo -->
-                                    {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
-                                    <div class="mb-4 text-center">
-                                        <h6>Current Pet Photo</h6>
-                                        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}" alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 200px;">
-                                        <p class="text-muted mt-2">Upload a new photo below to replace the current one</p>
-                                    </div>
-                                    {% endif %}
+                        <div class="card shadow-sm">
+                            <div class="card-body p-4">
+                                <h5 class="card-title text-primary mb-4">Pet Information</h5>
 
-                                    <!-- Photo Upload Section -->
-                                    <div class="mb-4">
-                                        <h6><i class="fas fa-camera me-2"></i>Update Pet Photo (Optional)</h6>
-                                        <div class="border rounded p-3 text-center" style="background: #f8f9fa;">
-                                            <input type="file" name="pet_photo" id="pet_photo" class="d-none" accept="image/*">
-                                            <label for="pet_photo" class="cursor-pointer">
-                                                <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
-                                                <p class="mb-0 text-muted">Click to upload new pet photo</p>
-                                                <small class="text-muted">PNG, JPG, JPEG, GIF up to 16MB</small>
-                                            </label>
+                                <form method="POST" action="{{ url_for('edit_pet', pet_id=pet.id) }}" enctype="multipart/form-data">
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label for="pet_name" class="form-label fw-semibold small">Pet Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control form-control-sm" id="pet_name" name="pet_name"
+                                                   value="{{ pet.name }}" required placeholder="Enter pet name">
                                         </div>
-                                        <div id="photo-preview" class="text-center mt-3" style="display: none;">
-                                            <img id="preview-image" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
-                                            <p class="text-muted mt-2">New photo preview</p>
-                                        </div>
-                                    </div>
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="pet_name" class="form-label">Pet Name <span class="text-danger">*</span></label>
-                                            <input type="text" class="form-control" id="pet_name" name="pet_name"
-                                                   value="{{ pet.name }}" required>
-                                        </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="pet_category" class="form-label">Category <span class="text-danger">*</span></label>
-                                            <select class="form-control" id="pet_category" name="pet_category" required>
+
+                                        <div class="col-md-6">
+                                            <label for="pet_category" class="form-label fw-semibold small">Category <span class="text-danger">*</span></label>
+                                            <select class="form-select form-select-sm" id="pet_category" name="pet_category" required>
                                                 <option value="">Select Category</option>
-                                                <option value="Dog" {{ 'selected' if pet.category == 'Dog' else '' }}>Dog</option>
-                                                <option value="Cat" {{ 'selected' if pet.category == 'Cat' else '' }}>Cat</option>
-                                                <option value="Other" {{ 'selected' if pet.category == 'Other' else '' }}>Other</option>
+                                                <option value="Dog" {{ 'selected' if pet.category == 'Dog' else '' }}>🐕 Dog</option>
+                                                <option value="Cat" {{ 'selected' if pet.category == 'Cat' else '' }}>🐱 Cat</option>
+                                                <option value="Other" {{ 'selected' if pet.category == 'Other' else '' }}>🐹 Other</option>
                                             </select>
                                         </div>
-                                    </div>
 
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="pet_type" class="form-label">Type/Breed</label>
-                                            <input type="text" class="form-control" id="pet_type" name="pet_type"
+                                        <div class="col-md-6">
+                                            <label for="pet_type" class="form-label fw-semibold small">Type/Breed</label>
+                                            <input type="text" class="form-control form-control-sm" id="pet_type" name="pet_type"
                                                    value="{{ pet.pet_type }}" placeholder="e.g., Golden Retriever, Persian">
                                         </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="age" class="form-label">Age (years)</label>
-                                            <input type="number" class="form-control" id="age" name="age"
-                                                   value="{{ pet.age }}" min="0" max="50">
-                                        </div>
-                                    </div>
 
-                                    <div class="row">
-                                        <div class="col-md-6 mb-3">
-                                            <label for="color" class="form-label">Color</label>
-                                            <input type="text" class="form-control" id="color" name="color"
+                                        <div class="col-md-6">
+                                            <label for="age" class="form-label fw-semibold small">Age (years)</label>
+                                            <input type="number" class="form-control form-control-sm" id="age" name="age"
+                                                   value="{{ pet.age }}" min="0" max="50" placeholder="Enter age">
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <label for="color" class="form-label fw-semibold small">Color</label>
+                                            <input type="text" class="form-control form-control-sm" id="color" name="color"
                                                    value="{{ pet.color }}" placeholder="e.g., Brown, White, Black">
                                         </div>
-                                        <div class="col-md-6 mb-3">
-                                            <label for="gender" class="form-label">Gender</label>
-                                            <select class="form-control" id="gender" name="gender">
+
+                                        <div class="col-md-6">
+                                            <label for="gender" class="form-label fw-semibold small">Gender</label>
+                                            <select class="form-select form-select-sm" id="gender" name="gender">
                                                 <option value="">Select Gender</option>
                                                 <option value="Male" {{ 'selected' if pet.gender == 'Male' else '' }}>Male</option>
                                                 <option value="Female" {{ 'selected' if pet.gender == 'Female' else '' }}>Female</option>
                                             </select>
                                         </div>
+
+                                        <!-- Photo Upload Section -->
+                                        <div class="col-12 mt-3">
+                                            <h6 class="text-muted small mb-3">Pet Photo</h6>
+
+                                            <!-- Current Pet Photo -->
+                                            {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}
+                                            <div class="mb-3">
+                                                <p class="small text-muted mb-2">Current Photo:</p>
+                                                <div class="border rounded p-2" style="background: #f8f9fa;">
+                                                    <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ (datetime.now().timestamp() * 1000) | int }}"
+                                                         alt="{{ pet.name }}" class="img-fluid rounded" style="max-height: 150px; width: 100%; object-fit: cover;">
+                                                </div>
+                                                <small class="text-muted">This will be replaced if you upload a new photo</small>
+                                            </div>
+                                            {% endif %}
+
+                                            <!-- Photo Upload Button -->
+                                            <div class="d-flex align-items-center gap-3">
+                                                <input type="file" name="pet_photo" id="pet_photo" class="d-none" accept="image/*">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="document.getElementById('pet_photo').click()">
+                                                    <i class="fas fa-upload me-2"></i>Upload New Photo
+                                                </button>
+                                                <small class="text-muted">PNG, JPG, JPEG, GIF (Max 16MB)</small>
+                                            </div>
+
+                                            <div id="photo-preview" class="mt-3" style="display: none;">
+                                                <p class="small text-muted mb-2">New Photo Preview:</p>
+                                                <img id="preview-image" src="" alt="Preview" class="img-fluid rounded" style="max-height: 150px; width: 100%; object-fit: cover;">
+                                            </div>
+                                        </div>
                                     </div>
 
-
-                                    <div class="mb-3 form-check">
-                                        <input type="checkbox" class="form-check-input" id="for_adoption" name="for_adoption"
-                                               {{ 'checked' if pet.available_for_adoption else '' }}>
-                                        <label class="form-check-label" for="for_adoption">Available for Adoption</label>
-                                    </div>
-
-                                    <div class="d-flex gap-2">
-                                        <button type="submit" class="btn btn-primary">
+                                    <div class="d-flex gap-2 mt-4">
+                                        <button type="submit" class="btn btn-primary btn-sm px-4">
                                             <i class="fas fa-save me-2"></i>Update Pet Details
                                         </button>
-                                        <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                                        <a href="{{ url_for('pet_details', pet_id=pet.id) }}" class="btn btn-outline-secondary btn-sm px-3">
+                                            <i class="fas fa-times me-1"></i> Cancel
+                                        </a>
                                     </div>
                                 </form>
                             </div>

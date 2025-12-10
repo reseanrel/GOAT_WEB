@@ -1360,104 +1360,104 @@ def express_adoption_interest(pet_id):
 @login_required
 def add_comment(pet_id):
     # Check if pet exists and is lost
-    cursor.execute("SELECT * FROM pets WHERE id = %s AND lost = TRUE", (pet_id,))
-    pet = cursor.fetchone()
+    with DatabaseConnection() as (cursor, conn):
+        cursor.execute("SELECT * FROM pets WHERE id = %s AND lost = TRUE", (pet_id,))
+        pet = cursor.fetchone()
 
-    if not pet:
-        return jsonify({'success': False, 'message': 'Lost pet not found'})
+        if not pet:
+            return jsonify({'success': False, 'message': 'Lost pet not found'})
 
-    comment_text = request.form.get('comment')
-    if not comment_text or not comment_text.strip():
-        return jsonify({'success': False, 'message': 'Comment cannot be empty'})
+        comment_text = request.form.get('comment')
+        if not comment_text or not comment_text.strip():
+            return jsonify({'success': False, 'message': 'Comment cannot be empty'})
 
-    # Get user_id if logged in, otherwise NULL for anonymous
-    user_id = session.get('user_id') if 'user_id' in session else None
+        # Get user_id if logged in, otherwise NULL for anonymous
+        user_id = session.get('user_id') if 'user_id' in session else None
 
-    # Insert comment
-    cursor.execute("""
-        INSERT INTO comments (pet_id, user_id, comment)
-        VALUES (%s, %s, %s)
-    """, (pet_id, user_id, comment_text.strip()))
-    conn.commit()
+        # Insert comment
+        cursor.execute("""
+            INSERT INTO comments (pet_id, user_id, comment)
+            VALUES (%s, %s, %s)
+        """, (pet_id, user_id, comment_text.strip()))
 
-    # Send email notification to admin
-    try:
-        admin_email = 'resedelrio9@gmail.com'  # Admin's Gmail
-        pet_name = pet['name']
-        commenter_name = session.get('user_name', 'Anonymous') if user_id else 'Anonymous'
+        # Send email notification to admin
+        try:
+            admin_email = 'resedelrio9@gmail.com'  # Admin's Gmail
+            pet_name = pet['name']
+            commenter_name = session.get('user_name', 'Anonymous') if user_id else 'Anonymous'
 
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"New Comment on Lost Pet: {pet_name}"
-        msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
-        msg['To'] = admin_email
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"New Comment on Lost Pet: {pet_name}"
+            msg['From'] = f"{app.config['COMPANY_NAME']} <{app.config['MAIL_USERNAME']}>"
+            msg['To'] = admin_email
 
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
-                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
-                .comment-box {{ background: #fff; padding: 20px; border-left: 4px solid #FF6B35; margin: 20px 0; }}
-                .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>{app.config['COMPANY_NAME']} - New Comment Alert</h1>
-            </div>
-            <div class="content">
-                <p>A new comment has been added to a lost pet report:</p>
-
-                <div class="comment-box">
-                    <h4>Lost Pet: {pet_name}</h4>
-                    <p><strong>Commenter:</strong> {commenter_name}</p>
-                    <p><strong>Comment:</strong></p>
-                    <p style="background: #f8f9fa; padding: 10px; border-radius: 3px;">{comment_text}</p>
-                    <p><strong>Posted on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background: #FF6B35; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }}
+                    .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 5px 5px; }}
+                    .comment-box {{ background: #fff; padding: 20px; border-left: 4px solid #FF6B35; margin: 20px 0; }}
+                    .footer {{ margin-top: 20px; padding: 20px; background: #f1f1f1; text-align: center; border-radius: 5px; font-size: 12px; color: #666; }}
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>{app.config['COMPANY_NAME']} - New Comment Alert</h1>
                 </div>
+                <div class="content">
+                    <p>A new comment has been added to a lost pet report:</p>
 
-                <p>Please check the admin dashboard to view all comments and manage lost pet reports.</p>
-            </div>
-            <div class="footer">
-                <p>This is an automated notification from {app.config['COMPANY_NAME']}.</p>
-                <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
-            </div>
-        </body>
-        </html>
-        """
+                    <div class="comment-box">
+                        <h4>Lost Pet: {pet_name}</h4>
+                        <p><strong>Commenter:</strong> {commenter_name}</p>
+                        <p><strong>Comment:</strong></p>
+                        <p style="background: #f8f9fa; padding: 10px; border-radius: 3px;">{comment_text}</p>
+                        <p><strong>Posted on:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    </div>
 
-        text_content = f"""
-        {app.config['COMPANY_NAME']} - New Comment Alert
+                    <p>Please check the admin dashboard to view all comments and manage lost pet reports.</p>
+                </div>
+                <div class="footer">
+                    <p>This is an automated notification from {app.config['COMPANY_NAME']}.</p>
+                    <p>&copy; 2024 {app.config['COMPANY_NAME']}. All rights reserved.</p>
+                </div>
+            </body>
+            </html>
+            """
 
-        A new comment has been added to a lost pet report.
+            text_content = f"""
+            {app.config['COMPANY_NAME']} - New Comment Alert
 
-        Lost Pet: {pet_name}
-        Commenter: {commenter_name}
-        Comment: {comment_text}
-        Posted on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            A new comment has been added to a lost pet report.
 
-        Please check the admin dashboard to view all comments.
-        """
+            Lost Pet: {pet_name}
+            Commenter: {commenter_name}
+            Comment: {comment_text}
+            Posted on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
-        part1 = MIMEText(text_content, 'plain')
-        part2 = MIMEText(html_content, 'html')
-        msg.attach(part1)
-        msg.attach(part2)
+            Please check the admin dashboard to view all comments.
+            """
 
-        server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
-        server.starttls()
-        server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-        server.send_message(msg)
-        server.quit()
+            part1 = MIMEText(text_content, 'plain')
+            part2 = MIMEText(html_content, 'html')
+            msg.attach(part1)
+            msg.attach(part2)
 
-        print(f"[SUCCESS] Admin notification email sent for comment on pet {pet_name}")
+            server = smtplib.SMTP(app.config['MAIL_SERVER'], app.config['MAIL_PORT'])
+            server.starttls()
+            server.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+            server.send_message(msg)
+            server.quit()
 
-    except Exception as e:
-        print(f"[ERROR] Error sending admin notification email: {str(e)}")
+            print(f"[SUCCESS] Admin notification email sent for comment on pet {pet_name}")
 
-    return jsonify({'success': True, 'message': 'Comment added successfully'})
+        except Exception as e:
+            print(f"[ERROR] Error sending admin notification email: {str(e)}")
+
+        return jsonify({'success': True, 'message': 'Comment added successfully'})
 
 @app.route('/user/edit-profile', methods=['GET', 'POST'])
 @login_required

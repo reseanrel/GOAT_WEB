@@ -28,7 +28,11 @@
        {% if pet.photo_url and pet.photo_url.strip() %}
        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
        {% else %}
+       {% if pet.category == 'Other' %}
+       <img src="{{ url_for('static', filename='uploads/other_category_image.jpg') }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
+       {% else %}
        <img src="https://via.placeholder.com/260x200" class="pet-img">
+       {% endif %}
        {% endif %}
        <div class="tag-bar">
            {% if pet.category == 'Dog' %}

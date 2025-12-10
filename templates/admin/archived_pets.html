@@ -45,7 +45,7 @@
                                     <option value="Other">Other</option>
                                 </select>
                             </div>
-                            <div style="flex: 0 0 auto;">
+                            <div style="flex: 0 0 auto; display: flex; gap: 0.5rem;">
                                 <button class="btn btn-secondary btn-sm" id="clearFiltersBtn">Clear Filters</button>
                             </div>
                         </div>
@@ -77,7 +77,7 @@
                                     <tbody>
                                         {% for pet in pets %}
                                         <tr class="pet-row" data-status="{% if pet.lost %}lost{% else %}safe{% endif %}" data-category="{{ pet.category }}">
-                                            <td>{{ pet.display_id }}</td>
+                                            <td>{{ pet.id }}</td>
                                             <td>
                                                 <div class="d-flex align-items-center">
                                                     {% if pet.photo_url and pet.photo_url != 'None' and pet.photo_url.strip() %}

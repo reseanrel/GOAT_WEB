@@ -31,7 +31,11 @@
        {% if pet.photo_url and pet.photo_url.strip() %}
        <img src="{{ url_for('static', filename='uploads/' + pet.photo_url) }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
        {% else %}
+       {% if pet.category == 'Other' %}
+       <img src="{{ url_for('static', filename='uploads/other_category_image.jpg') }}?t={{ datetime.now().timestamp() | int }}" alt="{{ pet.name }}" class="pet-img">
+       {% else %}
        <img src="https://via.placeholder.com/260x200" class="pet-img">
+       {% endif %}
        {% endif %}
        <div class="tag-bar">
            {% if pet.category == 'Dog' %}
@@ -81,56 +85,57 @@
        </div>
    {% endif %}
 
+            </div>
+
 <!-- Pagination -->
 {% if total_pages > 1 %}
 <div class="d-flex justify-content-center mt-4">
-   <nav aria-label="Pending pets pagination">
-       <ul class="pagination">
-           <!-- Previous button -->
-           {% if page > 1 %}
-           <li class="page-item">
-               <a class="page-link" href="{{ url_for('admin_pending_pets', page=page-1) }}">
-                   <i class="fas fa-chevron-left"></i> Previous
-               </a>
-           </li>
-           {% else %}
-           <li class="page-item disabled">
-               <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
-           </li>
-           {% endif %}
+  <nav aria-label="Pending pets pagination">
+      <ul class="pagination">
+          <!-- Previous button -->
+          {% if page > 1 %}
+          <li class="page-item">
+              <a class="page-link" href="{{ url_for('admin_pending_pets', page=page-1) }}">
+                  <i class="fas fa-chevron-left"></i> Previous
+              </a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+              <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+          </li>
+          {% endif %}
 
-           <!-- Page numbers -->
-           {% for page_num in range(1, total_pages + 1) %}
-           {% if page_num >= page - 2 and page_num <= page + 2 %}
-           <li class="page-item {% if page_num == page %}active{% endif %}">
-               <a class="page-link" href="{{ url_for('admin_pending_pets', page=page_num) }}">{{ page_num }}</a>
-           </li>
-           {% endif %}
-           {% endfor %}
+          <!-- Page numbers -->
+          {% for page_num in range(1, total_pages + 1) %}
+          {% if page_num >= page - 2 and page_num <= page + 2 %}
+          <li class="page-item {% if page_num == page %}active{% endif %}">
+              <a class="page-link" href="{{ url_for('admin_pending_pets', page=page_num) }}">{{ page_num }}</a>
+          </li>
+          {% endif %}
+          {% endfor %}
 
-           <!-- Next button -->
-           {% if page < total_pages %}
-           <li class="page-item">
-               <a class="page-link" href="{{ url_for('admin_pending_pets', page=page+1) }}">
-                   Next <i class="fas fa-chevron-right"></i>
-               </a>
-           </li>
-           {% else %}
-           <li class="page-item disabled">
-               <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
-           </li>
-           {% endif %}
-       </ul>
-   </nav>
+          <!-- Next button -->
+          {% if page < total_pages %}
+          <li class="page-item">
+              <a class="page-link" href="{{ url_for('admin_pending_pets', page=page+1) }}">
+                  Next <i class="fas fa-chevron-right"></i>
+              </a>
+          </li>
+          {% else %}
+          <li class="page-item disabled">
+              <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+          </li>
+          {% endif %}
+      </ul>
+  </nav>
 </div>
 
 <!-- Pagination info -->
 <div class="text-center text-muted mt-2">
-   Showing {{ start_item }} to {{ end_item }} of {{ total_count }} pending pets
+  Showing {{ start_item }} to {{ end_item }} of {{ total_count }} pending pets
 </div>
 {% endif %}
 
-            </div>
         </div>
     </div>
 </div>

@@ -845,3 +845,353 @@ h2 {
     gap: 0.5rem;
     margin-bottom: 0 !important;
 }
+
+/* Edit Pet Page Specific Styles */
+.edit-pet-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+.edit-pet-card {
+    border: none;
+    border-radius: 16px;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease;
+}
+
+.edit-pet-card:hover {
+    box-shadow: var(--shadow-lg);
+}
+
+.edit-pet-header {
+    background: linear-gradient(135deg, var(--gray-50) 0%, white 100%);
+    border-bottom: 1px solid var(--gray-200);
+    padding: 1.5rem;
+    border-radius: 16px 16px 0 0 !important;
+    border: none;
+}
+
+.edit-pet-header h5 {
+    color: var(--gray-900);
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.edit-pet-body {
+    padding: 2rem;
+}
+
+.photo-upload-section {
+    border: 2px dashed var(--gray-300);
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--gray-50);
+}
+
+.photo-upload-section:hover {
+    border-color: var(--primary-color);
+    background: var(--gray-100);
+}
+
+.photo-upload-icon {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.form-control-lg {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 2px solid var(--gray-200);
+    transition: all 0.3s ease;
+}
+
+.form-control-lg:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);
+    outline: none;
+}
+
+.form-select-lg {
+    font-size: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 2px solid var(--gray-200);
+    transition: all 0.3s ease;
+    background-position: right 1rem center;
+}
+
+.form-select-lg:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(44, 90, 160, 0.25);
+    outline: none;
+}
+
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary.btn-lg:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(44, 90, 160, 0.3);
+}
+
+.btn-outline-secondary.btn-lg {
+    border: 2px solid var(--gray-300);
+    color: var(--gray-700);
+    font-weight: 600;
+}
+
+.btn-outline-secondary.btn-lg:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+    color: var(--gray-900);
+}
+
+.current-photo-container {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 1rem;
+    background: white;
+    margin-bottom: 1.5rem;
+}
+
+.current-photo-container img {
+    width: 100%;
+    height: 250px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.photo-preview-container {
+    margin-top: 1rem;
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 1rem;
+    background: white;
+}
+
+.photo-preview-container img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+/* Responsive adjustments for edit pet page */
+@media (max-width: 992px) {
+    .edit-pet-body {
+        padding: 1.5rem;
+    }
+
+    .form-control-lg, .form-select-lg {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .edit-pet-body {
+        padding: 1rem;
+    }
+
+    .photo-upload-section {
+        padding: 1.5rem;
+    }
+
+    .photo-upload-icon {
+        font-size: 2rem;
+    }
+
+    .current-photo-container img,
+    .photo-preview-container img {
+        height: 200px;
+    }
+}
+
+/* Edit Pet Page - Photo Upload Section */
+.photo-upload-section {
+    border: 2px dashed var(--gray-300);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: var(--gray-50);
+    margin-bottom: 1rem;
+}
+
+.photo-upload-section:hover {
+    border-color: var(--primary-color);
+    background: var(--gray-100);
+}
+
+.photo-upload-icon {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+/* Current photo container styling */
+.current-photo-container {
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: white;
+    margin-bottom: 1rem;
+}
+
+.current-photo-container img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+/* Photo preview container styling */
+.photo-preview-container {
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: white;
+    margin-top: 1rem;
+}
+
+.photo-preview-container img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 6px;
+}
+
+/* Form control small styling to match edit profile */
+.form-control-sm, .form-select-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 6px;
+    border: 1px solid var(--gray-300);
+    transition: all 0.2s ease;
+}
+
+.form-control-sm:focus, .form-select-sm:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.15rem rgba(44, 90, 160, 0.25);
+    outline: none;
+}
+
+/* Button styling to match edit profile */
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.btn-primary.btn-sm {
+    background: var(--primary-color);
+    border: none;
+}
+
+.btn-primary.btn-sm:hover {
+    background: #1e3d6f;
+    transform: translateY(-1px);
+}
+
+.btn-outline-secondary.btn-sm {
+    border: 1px solid var(--gray-300);
+    color: var(--gray-700);
+}
+
+.btn-outline-secondary.btn-sm:hover {
+    background: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.btn-outline-primary.btn-sm {
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+}
+
+.btn-outline-primary.btn-sm:hover {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* Align search and clear buttons properly */
+.filter-form-container .btn-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    margin-bottom: 0;
+}
+
+.filter-form-container .btn {
+    height: 38px;
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+/* Ensure button container has same height as other form controls */
+.filter-form-container > div:last-child {
+    height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    margin-bottom: 0;
+}
+
+/* Specific alignment for search and clear buttons */
+.filter-form-container .search-clear-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    justify-content: flex-end;
+    height: 38px;
+    margin-top: auto;
+}
+
+/* Ensure all form control containers have consistent height */
+.filter-form-container > div[style*="flex"] {
+    height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* Make sure labels and inputs are properly aligned */
+.filter-form-container .form-label {
+    min-height: 16px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.filter-form-container .form-control,
+.filter-form-container .form-select {
+    height: 38px;
+    min-height: 38px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
